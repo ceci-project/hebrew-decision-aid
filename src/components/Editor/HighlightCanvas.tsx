@@ -21,7 +21,7 @@ export const HighlightCanvas: React.FC<Props> = ({ content, insights }) => {
       );
     }
 
-    const crit = CRITERIA_MAP[ins.criterionId];
+    const crit = CRITERIA_MAP[ins.criterionId] || ({ colorVar: "--crit-fallback", name: "" } as any);
     const spanId = `hl-${ins.id}`;
 
     nodes.push(

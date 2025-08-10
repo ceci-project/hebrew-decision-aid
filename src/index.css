@@ -109,14 +109,34 @@ All colors MUST be HSL.
 @layer base {
   :root {
     --gradient-primary: linear-gradient(135deg, hsl(var(--background)), hsl(var(--secondary)));
-    --crit-legal: 210 100% 85%;
-    --crit-budget: 150 100% 85%;
-    --crit-stakeholders: 48 100% 86%;
+    --crit-timeline: 210 100% 85%;
+    --crit-integrator: 265 100% 88%;
+    --crit-reporting: 190 85% 85%;
+    --crit-evaluation: 25 95% 85%;
+    --crit-external-audit: 340 85% 85%;
+    --crit-resources: 150 100% 85%;
+    --crit-multi-levels: 280 70% 86%;
+    --crit-structure: 48 100% 86%;
+    --crit-field-implementation: 12 90% 85%;
+    --crit-arbitrator: 330 70% 86%;
+    --crit-cross-sector: 200 70% 86%;
+    --crit-outcomes: 90 70% 86%;
+    --crit-fallback: 0 0% 80%;
   }
   .dark {
-    --crit-legal: 210 70% 35%;
-    --crit-budget: 150 60% 35%;
-    --crit-stakeholders: 48 70% 40%;
+    --crit-timeline: 210 70% 35%;
+    --crit-integrator: 265 60% 40%;
+    --crit-reporting: 190 55% 38%;
+    --crit-evaluation: 25 70% 40%;
+    --crit-external-audit: 340 60% 40%;
+    --crit-resources: 150 60% 35%;
+    --crit-multi-levels: 280 50% 42%;
+    --crit-structure: 48 70% 40%;
+    --crit-field-implementation: 12 60% 40%;
+    --crit-arbitrator: 330 55% 42%;
+    --crit-cross-sector: 200 55% 42%;
+    --crit-outcomes: 90 55% 42%;
+    --crit-fallback: 0 0% 35%;
   }
 }
 

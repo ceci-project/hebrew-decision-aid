@@ -26,6 +26,8 @@ const EditorPage = () => {
   const [tab, setTab] = useState("canvas");
   const [loading, setLoading] = useState(false);
   const [meta, setMeta] = useState<AnalysisMeta | undefined>(undefined);
+  const [criteria, setCriteria] = useState<Array<{ id: string; name: string; weight: number; score: number; justification: string }>>([]);
+  const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
 
   useEffect(() => {
     if (!doc) {
@@ -48,6 +50,8 @@ const EditorPage = () => {
         : (result?.insights ?? []);
       setInsights(ins);
       setMeta(result?.meta);
+      setCriteria(Array.isArray(result?.criteria) ? result.criteria : []);
+      setSummary(result?.summary ?? null);
       storage.saveInsights(doc.id, ins);
       toast({ title: "הניתוח הושלם", description: "הודגשים והערות עודכנו" });
     } catch (e) {
@@ -125,6 +129,34 @@ const EditorPage = () => {
               )}
             </div>
           )}
+          {summary && (
+            <div className="mb-3 rounded-md border p-2 bg-secondary/30">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-semibold">סיכום ישימות</span>
+                <span className="font-medium">
+                  {summary.feasibilityPercent}% • {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 'ישימות גבוהה'}
+                </span>
+              </div>
+              {summary.reasoning && (
+                <p className="mt-1 text-xs text-muted-foreground">{summary.reasoning}</p>
+              )}
+            </div>
+          )}
+
+          {criteria.length > 0 && (
+            <div className="mb-3">
+              <h4 className="text-xs font-semibold mb-1">ציוני קריטריונים</h4>
+              <ul className="space-y-1">
+                {criteria.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between text-xs">
+                    <span>{c.name}</span>
+                    <span>{c.score}/5 • {c.weight}%</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <h3 className="text-sm font-semibold mb-2">הערות ותובנות</h3>
           {CRITERIA.map((c) => (
             <div key={c.id} className="mb-3">

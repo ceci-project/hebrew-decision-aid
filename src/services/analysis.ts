@@ -25,6 +25,15 @@ export interface AnalysisMeta {
 
 export interface AnalysisResult {
   insights: Insight[];
+  criteria?: Array<{
+    id: string;
+    name: string;
+    weight: number;
+    score: number;
+    justification: string;
+    evidence?: Array<{ quote: string; rangeStart: number; rangeEnd: number }>;
+  }>;
+  summary?: { feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null;
   meta?: AnalysisMeta;
 }
 
@@ -48,6 +57,8 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
     }
 
     const raw: any[] = Array.isArray(apiData?.insights) ? apiData.insights : [];
+    const criteria = Array.isArray(apiData?.criteria) ? apiData.criteria : [];
+    const summary = apiData?.summary ?? null;
     const meta = apiData?.meta as AnalysisMeta | undefined;
 
     const insights: Insight[] = raw.map((i, idx) => {
@@ -68,7 +79,7 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
 
       return {
         id: String(i.id ?? `ai-${idx}`),
-        criterionId: String(i.criterionId ?? 'legal'),
+        criterionId: String(i.criterionId ?? 'timeline'),
         quote: String(i.quote ?? ''),
         explanation: String(i.explanation ?? ''),
         suggestion: String(i.suggestion ?? ''),
@@ -78,28 +89,28 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
     });
 
     insights.sort((a, b) => a.rangeStart - b.rangeStart);
-    return { insights, meta };
+    return { insights, criteria, summary, meta };
   } catch (_err) {
 
     // Fallback: local heuristic analysis
     const rules: Array<{ criterionId: keyof typeof CRITERIA_MAP; terms: string[]; expl: string; sug: string }> = [
       {
-        criterionId: "legal",
-        terms: ["חוק", "תקנה", "סמכות", "משפט"],
-        expl: "נדרש לוודא עמידה במסגרת החוקית והסמכויות הרלוונטיות.",
-        sug: "הוסיפו אסמכתא משפטית או הפניה לסעיף חוק רלוונטי.",
+        criterionId: "timeline" as any,
+        terms: ["תאריך", "דד-ליין", "עד", "תוך", "ימים", "שבועות", "חודשים"],
+        expl: "נדרש לוודא לוחות זמנים מחייבים ובהירים לביצוע.",
+        sug: "הוסיפו תאריכים מחייבים לכל משימה והגדירו מה קורה באי-עמידה.",
       },
       {
-        criterionId: "budget",
-        terms: ["תקציב", "עלות", "מימון", "הוצאה", "ש\"ח"],
+        criterionId: "resources" as any,
+        terms: ["תקציב", "עלות", "מימון", "הוצאה", "ש\"ח", "כספים"],
         expl: "נדרשת הערכה תקציבית מפורטת והגדרת מקורות מימון.",
-        sug: "הוסיפו טבלת עלויות ומקור תקציבי מאושר.",
+        sug: "הוסיפו טבלת עלויות, כוח אדם ומקור תקציבי מאושר.",
       },
       {
-        criterionId: "stakeholders",
-        terms: ["ציבור", "בעלי עניין", "משרדים", "רשויות", "שיתוף"],
-        expl: "יש להתחשב בהשפעה על בעלי עניין ובצורך בתיאום בין-משרדי.",
-        sug: "הוסיפו מנגנון שיתוף ציבור/תיאום בין-משרדי מתועד.",
+        criterionId: "cross_sector" as any,
+        terms: ["ציבור", "בעלי עניין", "עמות", "חברה אזרחית", "משרדים", "רשויות", "שיתוף"],
+        expl: "יש להתחשב בבעלי עניין ובצורך בשיתופי פעולה בין-מגזריים.",
+        sug: "הוסיפו מנגנון שיתוף ציבור ותיאום בין-משרדי/בין-מגזרי מתועד.",
       },
     ];
 
