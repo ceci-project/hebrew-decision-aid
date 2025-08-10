@@ -10,10 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 
 import { Document, Packer, Paragraph } from "docx";
 import type { AnalysisMeta } from "@/services/analysis";
-
+import CriterionAccordion from "@/components/Editor/CriterionAccordion";
 const EditorPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -130,30 +131,25 @@ const EditorPage = () => {
             </div>
           )}
           {summary && (
-            <div className="mb-3 rounded-md border p-2 bg-secondary/30">
+            <div className="mb-3 rounded-md border p-3 bg-secondary/30">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-semibold">סיכום ישימות</span>
+                <span className="font-semibold">ציון ישימות משוקלל</span>
                 <span className="font-medium">
                   {summary.feasibilityPercent}% • {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 'ישימות גבוהה'}
                 </span>
               </div>
+              <div className="mt-2">
+                <Progress value={summary.feasibilityPercent} />
+              </div>
               {summary.reasoning && (
-                <p className="mt-1 text-xs text-muted-foreground">{summary.reasoning}</p>
+                <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{summary.reasoning}</p>
               )}
             </div>
           )}
 
           {criteria.length > 0 && (
             <div className="mb-3">
-              <h4 className="text-xs font-semibold mb-1">ציוני קריטריונים</h4>
-              <ul className="space-y-1">
-                {criteria.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between text-xs">
-                    <span>{c.name}</span>
-                    <span>{c.score}/5 • {c.weight}%</span>
-                  </li>
-                ))}
-              </ul>
+              <CriterionAccordion criteriaData={criteria} insights={insights} />
             </div>
           )}
 
