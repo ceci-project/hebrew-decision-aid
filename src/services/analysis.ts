@@ -136,7 +136,44 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
 
       return {
         id: String(i.id ?? `ai-${idx}`),
-        criterionId: String(i.criterionId ?? 'timeline'),
+        criterionId: (() => {
+          const raw = (i.criterionId ?? (i as any).category ?? (i as any).key ?? '')
+            .toString()
+            .toLowerCase()
+            .trim()
+            .replace(/[\u200f\u200e\u202a-\u202e]/g, '')
+            .replace(/[^a-z\u05d0-\u05ea0-9]+/gi, '_')
+            .replace(/^_+|_+$/g, '');
+          const alias: Record<string, string> = {
+            field_implementation: 'field_implementation',
+            'field-implementation': 'field_implementation',
+            fieldimplementation: 'field_implementation',
+            in_field: 'field_implementation',
+            operational_implementation: 'field_implementation',
+            arbitrator: 'arbitrator',
+            arbiter: 'arbitrator',
+            decider: 'arbitrator',
+            decision_maker: 'arbitrator',
+            cross_sector: 'cross_sector',
+            'cross-sector': 'cross_sector',
+            intersectoral: 'cross_sector',
+            multi_sector: 'cross_sector',
+            partnership: 'cross_sector',
+            stakeholder_engagement: 'cross_sector',
+            public_participation: 'cross_sector',
+            outcomes: 'outcomes',
+            outcome_metrics: 'outcomes',
+            success_metrics: 'outcomes',
+            kpis: 'outcomes',
+            results_metrics: 'outcomes',
+          };
+          if (alias[raw]) return alias[raw];
+          if (CRITERIA_MAP[raw as keyof typeof CRITERIA_MAP]) return raw;
+          for (const key of Object.keys(CRITERIA_MAP)) {
+            if (raw.includes(key) || key.includes(raw)) return key;
+          }
+          return 'timeline';
+        })(),
         quote,
         explanation: String(i.explanation ?? ''),
         suggestion: String(i.suggestion ?? ''),
