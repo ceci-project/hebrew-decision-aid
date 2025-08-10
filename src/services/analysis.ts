@@ -20,14 +20,23 @@ function pickMatches(content: string, term: string): number[] {
 export async function analyzeDocument(content: string): Promise<Insight[]> {
   if (!content || !content.trim()) return [];
 
-  // Try server-side AI first
+  // Try server-side AI first (Assistants), then fallback to OpenAI function
   try {
-    const { data, error } = await supabase.functions.invoke('analyze-openai', {
-      body: { content },
-    });
-    if (error) throw error;
+    const tryInvoke = async (fnName: string) => {
+      const { data, error } = await supabase.functions.invoke(fnName, {
+        body: { content },
+      });
+      if (error) throw error;
+      return (data as any)?.insights ?? [];
+    };
 
-    const raw = (data as any)?.insights ?? [];
+    let raw: any[] = [];
+    try {
+      raw = await tryInvoke('analyze-assistant');
+    } catch (_e) {
+      raw = await tryInvoke('analyze-openai');
+    }
+
     const insights: Insight[] = (raw as any[]).map((i, idx) => {
       let rangeStart = typeof i.rangeStart === 'number' ? i.rangeStart : 0;
       let rangeEnd = typeof i.rangeEnd === 'number' ? i.rangeEnd : 0;
@@ -58,6 +67,7 @@ export async function analyzeDocument(content: string): Promise<Insight[]> {
     insights.sort((a, b) => a.rangeStart - b.rangeStart);
     return insights;
   } catch (_err) {
+
     // Fallback: local heuristic analysis
     const rules: Array<{ criterionId: keyof typeof CRITERIA_MAP; terms: string[]; expl: string; sug: string }> = [
       {

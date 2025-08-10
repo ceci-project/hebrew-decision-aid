@@ -2,3 +2,7 @@ project_id = "zdjlrxcsqicbumjgsern"
 
 [functions.analyze-openai]
 verify_jwt = false
+
+[functions.analyze-assistant]
+verify_jwt = false
+
