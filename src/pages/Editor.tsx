@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Document, Packer, Paragraph } from "docx";
 import type { AnalysisMeta } from "@/services/analysis";
 import CriterionAccordion from "@/components/Editor/CriterionAccordion";
+import FindingsAccordion from "@/components/Editor/FindingsAccordion";
 
 const EditorPage = () => {
   const { id } = useParams();
