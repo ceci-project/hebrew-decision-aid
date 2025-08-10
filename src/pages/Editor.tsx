@@ -1,0 +1,159 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { storage } from "@/services/storage";
+import { analyzeDocument } from "@/services/analysis";
+import { CRITERIA, CRITERIA_MAP } from "@/data/criteria";
+import { DecisionDocument, Insight } from "@/types/models";
+import HighlightCanvas from "@/components/Editor/HighlightCanvas";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/hooks/use-toast";
+
+import { Document, Packer, Paragraph } from "docx";
+
+const EditorPage = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [doc, setDoc] = useState<DecisionDocument | undefined>(() =>
+    id ? storage.getDocument(id) : undefined
+  );
+  const [insights, setInsights] = useState<Insight[]>(() =>
+    id ? storage.getInsights(id) : []
+  );
+  const [tab, setTab] = useState("canvas");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!doc) {
+      toast({ title: "מסמך לא נמצא", description: "חזרה למסך הבית" });
+      navigate("/");
+    }
+  }, [doc, navigate]);
+
+  const onReanalyze = async () => {
+    if (!doc) return;
+    if (!doc.content.trim()) {
+      toast({ title: "אין טקסט לניתוח", description: "אנא הזינו טקסט" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await analyzeDocument(doc.content);
+      setInsights(result);
+      storage.saveInsights(doc.id, result);
+      toast({ title: "הניתוח הושלם", description: "הודגשים והערות עודכנו" });
+    } catch (e) {
+      toast({ title: "שגיאה בניתוח", description: String(e) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onExportDocx = async () => {
+    if (!doc) return;
+    const paragraphs = doc.content.split("\n").map((line) => new Paragraph(line));
+    const d = new Document({ sections: [{ properties: {}, children: paragraphs }] });
+    const blob = await Packer.toBlob(d);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${doc.title || "document"}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+  const scrollToInsight = (ins: Insight) => {
+    const el = document.getElementById(`hl-${ins.id}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const groupedByCriterion = useMemo(() => {
+    const map: Record<string, Insight[]> = {};
+    for (const c of CRITERIA) map[c.id] = [];
+    for (const i of insights) (map[i.criterionId] ||= []).push(i);
+    return map;
+  }, [insights]);
+
+  if (!doc) return null;
+
+  return (
+    <div dir="rtl" className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <section className="lg:col-span-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Input
+            value={doc.title}
+            onChange={(e) => {
+              const updated = { ...doc, title: e.target.value, updatedAt: new Date().toISOString() };
+              setDoc(updated);
+              storage.saveDocument(updated);
+            }}
+            placeholder="כותרת המסמך"
+          />
+          <Button onClick={onReanalyze} disabled={loading} variant="default">
+            {loading ? "מנתח..." : "נתח מחדש"}
+          </Button>
+          <Button onClick={onExportDocx} variant="secondary">ייצוא DOCX</Button>
+        </div>
+
+        <div className="rounded-lg border p-3 max-h-[65vh] overflow-auto">
+          <h3 className="text-sm font-semibold mb-2">הערות ותובנות</h3>
+          {CRITERIA.map((c) => (
+            <div key={c.id} className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 rounded"
+                  style={{ background: `hsl(var(${c.colorVar}))` }}
+                />
+                <span className="text-sm font-medium">{c.name}</span>
+              </div>
+              <ul className="space-y-2">
+                {(groupedByCriterion[c.id] || []).map((ins) => (
+                  <li key={ins.id} className="rounded-md border p-2 hover:bg-accent cursor-pointer" onClick={() => scrollToInsight(ins)}>
+                    <p className="text-sm font-medium">"{ins.quote}"</p>
+                    <p className="text-xs text-muted-foreground">{ins.explanation}</p>
+                    <p className="text-xs text-muted-foreground">הצעה: {ins.suggestion}</p>
+                  </li>
+                ))}
+                {(!groupedByCriterion[c.id] || groupedByCriterion[c.id].length === 0) && (
+                  <li className="text-xs text-muted-foreground">אין הערות כרגע</li>
+                )}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="lg:col-span-8">
+        <Tabs value={tab} onValueChange={setTab} dir="rtl">
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="canvas">מצב קנבס</TabsTrigger>
+            <TabsTrigger value="edit">מצב עריכה</TabsTrigger>
+          </TabsList>
+          <TabsContent value="canvas" className="mt-4">
+            <div className="rounded-lg border p-5 max-h-[75vh] overflow-auto bg-card">
+              <HighlightCanvas content={doc.content} insights={insights} />
+            </div>
+          </TabsContent>
+          <TabsContent value="edit" className="mt-4">
+            <Textarea
+              className="min-h-[70vh]"
+              value={doc.content}
+              onChange={(e) => {
+                const updated = { ...doc, content: e.target.value, updatedAt: new Date().toISOString() };
+                setDoc(updated);
+                storage.saveDocument(updated);
+              }}
+              placeholder="כתבו או ערכו את טקסט ההחלטה כאן..."
+            />
+          </TabsContent>
+        </Tabs>
+      </section>
+    </div>
+  );
+};
+
+export default EditorPage;

@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -101,5 +102,24 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Heebo', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
   }
+}
+
+@layer base {
+  :root {
+    --gradient-primary: linear-gradient(135deg, hsl(var(--background)), hsl(var(--secondary)));
+    --crit-legal: 210 100% 85%;
+    --crit-budget: 150 100% 85%;
+    --crit-stakeholders: 48 100% 86%;
+  }
+  .dark {
+    --crit-legal: 210 70% 35%;
+    --crit-budget: 150 60% 35%;
+    --crit-stakeholders: 48 70% 40%;
+  }
+}
+
+@layer components {
+  .bg-gradient-primary { background: var(--gradient-primary); }
 }
