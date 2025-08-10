@@ -15,7 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Document, Packer, Paragraph } from "docx";
 import type { AnalysisMeta } from "@/services/analysis";
 import CriterionAccordion from "@/components/Editor/CriterionAccordion";
-import FindingsAccordion from "@/components/Editor/FindingsAccordion";
+
 const EditorPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -151,17 +151,12 @@ const EditorPage = () => {
               )}
             </div>
           )}
-
-          {criteria.length > 0 && (
+          {criteria.length > 0 ? (
             <div className="mb-3">
-              <CriterionAccordion criteriaData={criteria} insights={insights} />
+              <CriterionAccordion criteriaData={criteria} insights={insights} onJump={scrollToInsight} />
             </div>
-          )}
-
-          {insights.length > 0 ? (
-            <FindingsAccordion insights={insights} onJump={scrollToInsight} />
           ) : (
-            <p className="text-xs text-muted-foreground">אין הערות כרגע</p>
+            <p className="text-xs text-muted-foreground">אין קריטריונים להצגה</p>
           )}
 
         </div>

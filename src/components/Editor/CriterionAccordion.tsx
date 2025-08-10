@@ -2,8 +2,9 @@ import React from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { Insight } from "@/types/models";
-import { CRITERIA, CRITERIA_MAP } from "@/data/criteria";
+import { CRITERIA } from "@/data/criteria";
 import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
 
 type CriterionScore = {
@@ -18,9 +19,22 @@ type CriterionScore = {
 interface Props {
   criteriaData: CriterionScore[];
   insights: Insight[];
+  onJump?: (ins: Insight) => void;
 }
 
-const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights }) => {
+const SeverityBadge: React.FC<{ level?: Insight["severity"] }> = ({ level }) => {
+  if (!level) return null;
+  const label = level === 'critical' ? 'קריטי' : level === 'moderate' ? 'בינוני' : 'קל';
+  const color = level === 'critical' ? 'bg-destructive text-destructive-foreground' : level === 'moderate' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
+  return <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] ${color}`}>{label}</span>;
+};
+
+const copy = async (text?: string) => {
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); } catch {}
+};
+
+const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump }) => {
   const byId: Record<string, CriterionScore> = Object.fromEntries(
     (criteriaData || []).map((c) => [c.id, c])
   );
@@ -65,29 +79,100 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights }) => {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-3">
-                <div className="space-y-2 text-sm">
+                <div className="space-y-3 text-sm">
                   {data?.justification && (
                     <div>
                       <div className="font-medium">הסבר:</div>
                       <p className="text-muted-foreground leading-relaxed">{data.justification}</p>
                     </div>
                   )}
-                  {ev?.quote && (
+
+                  {critInsights.length > 0 ? (
                     <div>
-                      <div className="font-medium">ציטוט מהמסמך:</div>
-                      <blockquote className="text-muted-foreground bg-secondary/50 rounded p-2">“{ev.quote}”</blockquote>
-                    </div>
-                  )}
-                  {critInsights.length > 0 && (
-                    <div>
-                      <Separator className="my-1" />
-                      <div className="font-medium mb-1">הצעות לשיפור:</div>
-                      <ul className="list-disc pr-5 space-y-1">
+                      <Separator className="my-2" />
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="font-medium">ממצאים</div>
+                        <span className="text-xs text-muted-foreground">{critInsights.length}</span>
+                      </div>
+                      <Accordion type="single" collapsible>
                         {critInsights.map((ins) => (
-                          <li key={ins.id} className="text-xs text-muted-foreground">{ins.suggestion}</li>
+                          <AccordionItem key={`${c.id}-${ins.id}`} value={`${c.id}-${ins.id}`}>
+                            <AccordionTrigger className="px-2">
+                              <div className="flex w-full items-center justify-between gap-2 text-right">
+                                <div className="truncate text-sm font-medium">"{ins.quote}"</div>
+                                <div className="flex items-center gap-2">
+                                  <SeverityBadge level={ins.severity} />
+                                  <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onJump?.(ins); }}>מצא בטקסט</Button>
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-2">
+                              <div className="space-y-3">
+                                {ins.explanation && (
+                                  <div>
+                                    <div className="text-xs font-semibold">בעיה</div>
+                                    <p className="text-sm text-muted-foreground leading-relaxed">{ins.explanation}</p>
+                                  </div>
+                                )}
+                                {ins.suggestion && (
+                                  <div>
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-xs font-semibold">הצעה עיקרית</div>
+                                      <Button size="sm" variant="ghost" onClick={() => copy(ins.suggestion)}>העתק</Button>
+                                    </div>
+                                    <p className="text-sm leading-relaxed">{ins.suggestion}</p>
+                                  </div>
+                                )}
+                                {Array.isArray(ins.alternatives) && ins.alternatives.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-semibold">חלופות</div>
+                                    <ul className="list-disc pr-4 text-sm space-y-1">
+                                      {ins.alternatives.map((alt, i) => (
+                                        <li key={i} className="leading-relaxed">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <span>{alt}</span>
+                                            <Button size="sm" variant="ghost" onClick={() => copy(alt)}>העתק</Button>
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                {(ins.patchBalanced || ins.patchExtended) && (
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    {ins.patchBalanced && (
+                                      <div className="rounded-md border p-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <div className="text-xs font-semibold">מוצע (מאוזן)</div>
+                                          <Button size="sm" variant="ghost" onClick={() => copy(ins.patchBalanced)}>העתק</Button>
+                                        </div>
+                                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{ins.patchBalanced}</p>
+                                      </div>
+                                    )}
+                                    {ins.patchExtended && (
+                                      <div className="rounded-md border p-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <div className="text-xs font-semibold">מוצע (מורחב)</div>
+                                          <Button size="sm" variant="ghost" onClick={() => copy(ins.patchExtended)}>העתק</Button>
+                                        </div>
+                                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{ins.patchExtended}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
                         ))}
-                      </ul>
+                      </Accordion>
                     </div>
+                  ) : (
+                    ev?.quote ? (
+                      <div>
+                        <div className="font-medium">ציטוט מהמסמך:</div>
+                        <blockquote className="text-muted-foreground bg-secondary/50 rounded p-2">“{ev.quote}”</blockquote>
+                      </div>
+                    ) : null
                   )}
                 </div>
               </AccordionContent>
