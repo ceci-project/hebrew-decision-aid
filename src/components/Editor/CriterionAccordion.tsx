@@ -100,10 +100,18 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                             <AccordionTrigger className="px-2">
                               <div className="flex w-full items-center justify-between gap-2 text-right">
                                 <div className="truncate text-sm font-medium">"{ins.quote}"</div>
-                                <div className="flex items-center gap-2">
-                                  <SeverityBadge level={ins.severity} />
-                                  <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onJump?.(ins); }}>מצא בטקסט</Button>
-                                </div>
+        <div className="flex items-center gap-2">
+          <SeverityBadge level={ins.severity} />
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onJump?.(ins); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onJump?.(ins); } }}
+            className="inline-flex items-center rounded px-2 py-1 text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer select-none"
+          >
+            מצא בטקסט
+          </span>
+        </div>
                               </div>
                             </AccordionTrigger>
                             <AccordionContent className="px-2">
