@@ -78,8 +78,18 @@ const EditorPage = () => {
     URL.revokeObjectURL(url);
   };
   const scrollToInsight = (ins: Insight) => {
-    const el = document.getElementById(`hl-${ins.criterionId}-${ins.id}`) || document.getElementById(`hl-${ins.id}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Ensure canvas is visible before scrolling
+    setTab("canvas");
+    requestAnimationFrame(() => {
+      const el =
+        document.getElementById(`hl-${ins.criterionId}-${ins.id}`) ||
+        document.getElementById(`hl-${ins.id}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      // Temporary visual focus
+      el.classList.add("ring-2", "ring-primary/50", "transition-shadow");
+      setTimeout(() => el.classList.remove("ring-2", "ring-primary/50", "transition-shadow"), 1200);
+    });
   };
   const short = (s?: string | null) => (s ? `${s.slice(0,6)}…${s.slice(-4)}` : "");
 

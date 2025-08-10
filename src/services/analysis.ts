@@ -61,6 +61,32 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
     const summary = apiData?.summary ?? null;
     const meta = apiData?.meta as AnalysisMeta | undefined;
 
+    // Robust normalization helpers (memoized per content)
+    const getNormalized = (() => {
+      let cached: { text: string; map: number[] } | null = null;
+      const isKeep = (ch: string) => /[\p{L}\p{N}]/u.test(ch);
+      const build = () => {
+        const map: number[] = [];
+        let text = '';
+        for (let i = 0; i < content.length; i++) {
+          const ch = content[i];
+          if (isKeep(ch)) {
+            text += ch.toLowerCase();
+            map.push(i);
+          }
+        }
+        return { text, map };
+      };
+      return () => (cached ??= build());
+    })();
+
+    const normalize = (s: string) => (s ?? '')
+      .toLowerCase()
+      .replace(/[\u200f\u200e\u202a-\u202e]/g, '') // directionality marks
+      .split('')
+      .filter((ch) => /[\p{L}\p{N}]/u.test(ch))
+      .join('');
+
     const insights: Insight[] = raw.map((i, idx) => {
       const quote = String(i.quote ?? '');
       const clamp = (n: number) => Math.max(0, Math.min(content.length, n));
@@ -74,9 +100,20 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
         const qt = q.trim();
         pos = qt ? content.indexOf(qt) : -1;
         if (pos >= 0) return { start: pos, end: pos + qt.length };
+        // normalized (ignore quotes/punctuation/spacing/dir marks)
+        const { text: normContent, map } = getNormalized();
+        const qn = normalize(qt);
+        if (qn.length >= 2) {
+          const npos = normContent.indexOf(qn);
+          if (npos >= 0) {
+            const startOrig = map[npos] ?? 0;
+            const endOrig = clamp((map[npos + qn.length - 1] ?? startOrig) + 1);
+            return { start: startOrig, end: endOrig };
+          }
+        }
         // prefix chunk (helps when the model shortens quotes)
         const chunk = qt.slice(0, Math.min(24, qt.length));
-        if (chunk.length >= 6) {
+        if (chunk.length >= 4) {
           pos = content.indexOf(chunk);
           if (pos >= 0) return { start: pos, end: clamp(pos + qt.length) };
         }
