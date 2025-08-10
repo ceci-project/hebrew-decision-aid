@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 
 import { Document, Packer, Paragraph } from "docx";
+import type { AnalysisMeta } from "@/services/analysis";
 
 const EditorPage = () => {
   const { id } = useParams();
@@ -24,6 +25,7 @@ const EditorPage = () => {
   );
   const [tab, setTab] = useState("canvas");
   const [loading, setLoading] = useState(false);
+  const [meta, setMeta] = useState<AnalysisMeta | undefined>(undefined);
 
   useEffect(() => {
     if (!doc) {
@@ -40,9 +42,13 @@ const EditorPage = () => {
     }
     setLoading(true);
     try {
-      const result = await analyzeDocument(doc.content);
-      setInsights(result);
-      storage.saveInsights(doc.id, result);
+      const result: any = await analyzeDocument(doc.content);
+      const ins: Insight[] = Array.isArray(result)
+        ? (result as Insight[])
+        : (result?.insights ?? []);
+      setInsights(ins);
+      setMeta(result?.meta);
+      storage.saveInsights(doc.id, ins);
       toast({ title: "הניתוח הושלם", description: "הודגשים והערות עודכנו" });
     } catch (e) {
       toast({ title: "שגיאה בניתוח", description: String(e) });
@@ -69,6 +75,7 @@ const EditorPage = () => {
     const el = document.getElementById(`hl-${ins.id}`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
+  const short = (s?: string | null) => (s ? `${s.slice(0,6)}…${s.slice(-4)}` : "");
 
   const groupedByCriterion = useMemo(() => {
     const map: Record<string, Insight[]> = {};
@@ -99,6 +106,25 @@ const EditorPage = () => {
         </div>
 
         <div className="rounded-lg border p-3 max-h-[65vh] overflow-auto">
+          {meta && (
+            <div className="mb-2 text-[11px] text-muted-foreground">
+              {meta.source === 'assistants' ? (
+                <span>
+                  מופעל ע״י OpenAI Assistant
+                  {meta.assistantId ? ` • ${short(meta.assistantId)}` : ''}
+                  {meta.runId ? ` • ריצה ${short(meta.runId)}` : ''}
+                  {meta.model ? ` • ${meta.model}` : ''}
+                </span>
+              ) : meta.source === 'openai' ? (
+                <span>
+                  מופעל ע״י OpenAI
+                  {meta.model ? ` • ${meta.model}` : ''}
+                </span>
+              ) : (
+                <span>מופעל ע״י ניתוח מקומי</span>
+              )}
+            </div>
+          )}
           <h3 className="text-sm font-semibold mb-2">הערות ותובנות</h3>
           {CRITERIA.map((c) => (
             <div key={c.id} className="mb-3">

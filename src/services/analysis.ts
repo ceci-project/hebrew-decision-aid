@@ -16,10 +16,20 @@ function pickMatches(content: string, term: string): number[] {
   }
   return idxs;
 }
+export interface AnalysisMeta {
+  source: 'assistants' | 'openai' | 'local';
+  assistantId?: string;
+  runId?: string;
+  model?: string | null;
+}
 
-export async function analyzeDocument(content: string): Promise<Insight[]> {
-  if (!content || !content.trim()) return [];
+export interface AnalysisResult {
+  insights: Insight[];
+  meta?: AnalysisMeta;
+}
 
+export async function analyzeDocument(content: string): Promise<AnalysisResult> {
+  if (!content || !content.trim()) return { insights: [], meta: { source: 'local' } };
   // Try server-side AI first (Assistants), then fallback to OpenAI function
   try {
     const tryInvoke = async (fnName: string) => {
@@ -27,17 +37,20 @@ export async function analyzeDocument(content: string): Promise<Insight[]> {
         body: { content },
       });
       if (error) throw error;
-      return (data as any)?.insights ?? [];
+      return data as any;
     };
 
-    let raw: any[] = [];
+    let apiData: any = null;
     try {
-      raw = await tryInvoke('analyze-assistant');
+      apiData = await tryInvoke('analyze-assistant');
     } catch (_e) {
-      raw = await tryInvoke('analyze-openai');
+      apiData = await tryInvoke('analyze-openai');
     }
 
-    const insights: Insight[] = (raw as any[]).map((i, idx) => {
+    const raw: any[] = Array.isArray(apiData?.insights) ? apiData.insights : [];
+    const meta = apiData?.meta as AnalysisMeta | undefined;
+
+    const insights: Insight[] = raw.map((i, idx) => {
       let rangeStart = typeof i.rangeStart === 'number' ? i.rangeStart : 0;
       let rangeEnd = typeof i.rangeEnd === 'number' ? i.rangeEnd : 0;
 
@@ -65,7 +78,7 @@ export async function analyzeDocument(content: string): Promise<Insight[]> {
     });
 
     insights.sort((a, b) => a.rangeStart - b.rangeStart);
-    return insights;
+    return { insights, meta };
   } catch (_err) {
 
     // Fallback: local heuristic analysis
@@ -113,6 +126,6 @@ export async function analyzeDocument(content: string): Promise<Insight[]> {
     }
 
     insights.sort((a, b) => a.rangeStart - b.rangeStart);
-    return insights;
+    return { insights, meta: { source: 'local' } };
   }
 }

@@ -54,7 +54,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         assistant_id: assistantId,
-        instructions: system,
+        additional_instructions: system,
         thread: {
           messages: [
             { role: 'user', content: user }
@@ -76,9 +76,10 @@ serve(async (req) => {
     const runId = runCreateData?.id;
 
     // Poll the run until completion or failure
-    let status = runCreateData?.status;
-    const startedAt = Date.now();
-    while (!['completed', 'failed', 'cancelled', 'expired'].includes(status)) {
+      let status = runCreateData?.status;
+      const startedAt = Date.now();
+      let lastRunData = runCreateData;
+      while (!['completed', 'failed', 'cancelled', 'expired'].includes(status)) {
       if (Date.now() - startedAt > 45000) { // 45s timeout
         return new Response(
           JSON.stringify({ error: 'Assistant run timed out' }),
@@ -95,6 +96,7 @@ serve(async (req) => {
       });
       const runCheckData = await runCheckResp.json();
       status = runCheckData?.status;
+      lastRunData = runCheckData;
     }
 
     if (status !== 'completed') {
@@ -158,7 +160,15 @@ serve(async (req) => {
       : [];
 
     return new Response(
-      JSON.stringify({ insights }),
+      JSON.stringify({
+        insights,
+        meta: {
+          source: 'assistants',
+          assistantId,
+          runId,
+          model: lastRunData?.model ?? runCreateData?.model ?? null
+        }
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

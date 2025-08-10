@@ -36,6 +36,7 @@ serve(async (req) => {
 
     const user = `Content (UTF-8 Hebrew allowed):\n"""${content}"""`;
 
+    const model = 'gpt-4.1-2025-04-14';
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -44,7 +45,7 @@ serve(async (req) => {
         ...(openAIProjectId ? { 'OpenAI-Project': openAIProjectId } : {}),
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-2025-04-14',
+        model,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: system },
@@ -84,7 +85,7 @@ serve(async (req) => {
       : [];
 
     return new Response(
-      JSON.stringify({ insights }),
+      JSON.stringify({ insights, meta: { source: 'openai', model } }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
