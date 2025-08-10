@@ -85,6 +85,15 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
         suggestion: String(i.suggestion ?? ''),
         rangeStart,
         rangeEnd,
+        anchor: i.anchor ? String(i.anchor) : undefined,
+        severity: ['minor','moderate','critical'].includes(i?.severity) ? i.severity : undefined,
+        alternatives: Array.isArray(i?.alternatives)
+          ? i.alternatives.map((s: any) => String(s)).filter(Boolean)
+          : (typeof i?.alternatives === 'string' && i.alternatives
+              ? String(i.alternatives).split(/;|\u200f|\|/).map((s) => s.trim()).filter(Boolean)
+              : undefined),
+        patchBalanced: i?.patchBalanced ? String(i.patchBalanced) : undefined,
+        patchExtended: i?.patchExtended ? String(i.patchExtended) : undefined,
       } satisfies Insight;
     });
 

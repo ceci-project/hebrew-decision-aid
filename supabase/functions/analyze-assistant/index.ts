@@ -180,7 +180,37 @@ Rules:
       textContent = '';
     }
 
-    // Extract JSON from the text
+    // Try parsing JSON; if that fails, parse EditorAI markdown (Findings + Patch Blocks)
+    let insights: any[] = [];
+    let criteria: any[] = [];
+    let summary: any = null;
+
+    const mapHebrewCriterion = (t: string): AllowedId => {
+      const s = (t || '').toLowerCase();
+      if (s.includes('לוח') || s.includes('לו"ז') || s.includes('זמנים')) return 'timeline';
+      if (s.includes('מתכל') || s.includes('צוות')) return 'integrator';
+      if (s.includes('דיווח') || s.includes('בקרה')) return 'reporting';
+      if (s.includes('מדידה') || s.includes('הערכ')) return 'evaluation';
+      if (s.includes('ביקורת') && s.includes('חיצ')) return 'external_audit';
+      if (s.includes('משאב') || s.includes('תקצ')) return 'resources';
+      if (s.includes('דרג') || s.includes('מספר') || s.includes('מדיני')) return 'multi_levels';
+      if (s.includes('מבנה') || s.includes('חלוקת') || s.includes('אחריות')) return 'structure';
+      if (s.includes('יישום') || s.includes('שטח')) return 'field_implementation';
+      if (s.includes('מכריע') || s.includes('הכרע')) return 'arbitrator';
+      if (s.includes('מגזר') || s.includes('שיתוף')) return 'cross_sector';
+      if (s.includes('תוצאה') || s.includes('הצלחה') || s.includes('מדד')) return 'outcomes';
+      return 'timeline';
+    };
+
+    const cleanQuote = (q: string) => q.replace(/^\s*"|\"|\s*$/g, '').replace(/^"|"$/g, '').trim();
+
+    const locateRange = (q: string) => {
+      const qq = cleanQuote(q);
+      if (!qq) return { rangeStart: 0, rangeEnd: 0 };
+      const idx = content.indexOf(qq);
+      return idx >= 0 ? { rangeStart: idx, rangeEnd: idx + qq.length } : { rangeStart: 0, rangeEnd: 0 };
+    };
+
     let parsed: any = { insights: [], criteria: [], summary: null };
     if (textContent) {
       try {
@@ -195,62 +225,78 @@ Rules:
       }
     }
 
-    const insights = Array.isArray(parsed.insights)
-      ? parsed.insights.map((i: any, idx: number) => {
-          const criterionId = (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline';
-          const quote = String(i?.quote ?? '');
-          let rangeStart = Number.isFinite(i?.rangeStart) ? i.rangeStart : 0;
-          let rangeEnd = Number.isFinite(i?.rangeEnd) ? i.rangeEnd : 0;
-          return {
-            id: String(i?.id ?? `ai-${idx}`),
-            criterionId,
-            quote,
-            explanation: String(i?.explanation ?? ''),
-            suggestion: String(i?.suggestion ?? ''),
-            rangeStart,
-            rangeEnd,
-          };
-        })
-      : [];
+    const parsedInsights = Array.isArray(parsed.insights) ? parsed.insights : [];
+    const parsedCriteria = Array.isArray(parsed.criteria) ? parsed.criteria : [];
+    const parsedSummary = parsed?.summary ?? null;
 
-    const criteria = Array.isArray(parsed.criteria)
-      ? parsed.criteria.map((c: any, idx: number) => {
-          const id: AllowedId = (ALLOWED_CRITERIA as readonly string[]).includes(c?.id) ? c.id : 'timeline';
-          const weightRaw = Number.isFinite(c?.weight) ? c.weight : 0;
-          const weight = Math.max(0, Math.min(100, weightRaw));
-          const scoreRaw = Number.isFinite(c?.score) ? c.score : 0;
-          const score = Math.max(0, Math.min(5, scoreRaw));
-          const evidence = Array.isArray(c?.evidence)
-            ? c.evidence.map((e: any) => ({
-                quote: String(e?.quote ?? ''),
-                rangeStart: Number.isFinite(e?.rangeStart) ? e.rangeStart : 0,
-                rangeEnd: Number.isFinite(e?.rangeEnd) ? e.rangeEnd : 0,
-              }))
-            : [];
-          return {
-            id,
-            name: String(c?.name ?? id),
-            weight,
-            score,
-            justification: String(c?.justification ?? ''),
-            evidence,
-          };
-        })
-      : [];
+    if (parsedInsights.length || parsedCriteria.length || parsedSummary) {
+      // Keep JSON path behavior (legacy)
+      insights = parsedInsights.map((i: any, idx: number) => ({
+        id: String(i?.id ?? `ai-${idx}`),
+        criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
+        quote: String(i?.quote ?? ''),
+        explanation: String(i?.explanation ?? ''),
+        suggestion: String(i?.suggestion ?? ''),
+        rangeStart: Number.isFinite(i?.rangeStart) ? i.rangeStart : 0,
+        rangeEnd: Number.isFinite(i?.rangeEnd) ? i.rangeEnd : 0,
+        anchor: i?.anchor ? String(i.anchor) : undefined,
+        severity: ['minor','moderate','critical'].includes(i?.severity) ? i.severity : undefined,
+        alternatives: Array.isArray(i?.alternatives) ? i.alternatives.map((s: any) => String(s)).filter(Boolean) : undefined,
+        patchBalanced: i?.patchBalanced ? String(i.patchBalanced) : undefined,
+        patchExtended: i?.patchExtended ? String(i.patchExtended) : undefined,
+      }));
+      criteria = parsedCriteria;
+      summary = parsedSummary;
+    } else {
+      // Parse EditorAI markdown format
+      const lines = textContent.split(/\r?\n/);
+      const tableRows = lines.filter((l) => /^\s*\d+\s*\|/.test(l));
+      const anchorToPatches = new Map<string, { balanced?: string; extended?: string }>();
 
-    let summary = parsed?.summary && typeof parsed.summary === 'object' ? {
-      feasibilityPercent: Math.max(0, Math.min(100, Number(parsed.summary.feasibilityPercent) || 0)),
-      feasibilityLevel: ['low','medium','high'].includes(parsed.summary.feasibilityLevel) ? parsed.summary.feasibilityLevel : undefined,
-      reasoning: String(parsed.summary.reasoning ?? ''),
-    } : null;
+      // Parse Patch Blocks by anchors
+      const patchBlockRegex = /\[Anchor:\s*([^\]]+)\][\s\S]*?מקור:\s*"([\s\S]*?)"[\s\S]*?מוצע \(מאוזן\):\s*"([\s\S]*?)"[\s\S]*?מוצע \(מורחב\):\s*"([\s\S]*?)"/g;
+      let m: RegExpExecArray | null;
+      while ((m = patchBlockRegex.exec(textContent)) !== null) {
+        const anchor = m[1].trim();
+        anchorToPatches.set(anchor, { balanced: m[3].trim(), extended: m[4].trim() });
+      }
 
-    if (!summary || !summary.feasibilityLevel) {
-      // Derive from criteria if missing
-      const totalW = criteria.reduce((s: number, c: any) => s + (c.weight || 0), 0) || 1;
-      const pct = criteria.reduce((s: number, c: any) => s + ((c.score || 0) / 5) * (c.weight || 0), 0) / totalW * 100;
-      const percent = Math.round(pct);
-      const level = percent < 50 ? 'low' : percent < 75 ? 'medium' : 'high';
-      summary = { feasibilityPercent: percent, feasibilityLevel: level, reasoning: summary?.reasoning || '' } as any;
+      const parsedFindings: any[] = [];
+      for (const row of tableRows) {
+        const cols = row.split('|').map((c) => c.trim());
+        if (cols.length < 9) continue;
+        const anchor = cols[1];
+        const critText = cols[2];
+        const problem = cols[3];
+        const quote = cols[4].replace(/^"|"$/g, '');
+        const severity = cols[5].toLowerCase();
+        const suggestion = cols[6];
+        const alternativesRaw = cols[7];
+        const alternatives = alternativesRaw
+          ? alternativesRaw.split(/;|\u200f|\|/).map((s) => s.trim()).filter(Boolean)
+          : [];
+        const { rangeStart, rangeEnd } = locateRange(quote);
+        const criterionId = mapHebrewCriterion(critText);
+        const patches = anchorToPatches.get(anchor) || {};
+        parsedFindings.push({
+          id: `${criterionId}-${anchor}`,
+          anchor,
+          criterionId,
+          quote,
+          explanation: problem,
+          suggestion,
+          alternatives,
+          severity: ['minor','moderate','critical'].includes(severity) ? severity : undefined,
+          rangeStart,
+          rangeEnd,
+          patchBalanced: patches.balanced,
+          patchExtended: patches.extended,
+        });
+      }
+
+      insights = parsedFindings.slice(0, maxInsights);
+      criteria = [];
+      summary = null;
     }
 
     return new Response(

@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Document, Packer, Paragraph } from "docx";
 import type { AnalysisMeta } from "@/services/analysis";
 import CriterionAccordion from "@/components/Editor/CriterionAccordion";
+import FindingsAccordion from "@/components/Editor/FindingsAccordion";
 const EditorPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -82,12 +83,6 @@ const EditorPage = () => {
   };
   const short = (s?: string | null) => (s ? `${s.slice(0,6)}…${s.slice(-4)}` : "");
 
-  const groupedByCriterion = useMemo(() => {
-    const map: Record<string, Insight[]> = {};
-    for (const c of CRITERIA) map[c.id] = [];
-    for (const i of insights) (map[i.criterionId] ||= []).push(i);
-    return map;
-  }, [insights]);
 
   if (!doc) return null;
 
@@ -153,31 +148,12 @@ const EditorPage = () => {
             </div>
           )}
 
-          <h3 className="text-sm font-semibold mb-2">הערות ותובנות</h3>
-          {CRITERIA.map((c) => (
-            <div key={c.id} className="mb-3">
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  aria-hidden
-                  className="inline-block h-3 w-3 rounded"
-                  style={{ background: `hsl(var(${c.colorVar}))` }}
-                />
-                <span className="text-sm font-medium">{c.name}</span>
-              </div>
-              <ul className="space-y-2">
-                {(groupedByCriterion[c.id] || []).map((ins) => (
-                  <li key={ins.id} className="rounded-md border p-2 hover:bg-accent cursor-pointer" onClick={() => scrollToInsight(ins)}>
-                    <p className="text-sm font-medium">"{ins.quote}"</p>
-                    <p className="text-xs text-muted-foreground">{ins.explanation}</p>
-                    <p className="text-xs text-muted-foreground">הצעה: {ins.suggestion}</p>
-                  </li>
-                ))}
-                {(!groupedByCriterion[c.id] || groupedByCriterion[c.id].length === 0) && (
-                  <li className="text-xs text-muted-foreground">אין הערות כרגע</li>
-                )}
-              </ul>
-            </div>
-          ))}
+          {insights.length > 0 ? (
+            <FindingsAccordion insights={insights} onJump={scrollToInsight} />
+          ) : (
+            <p className="text-xs text-muted-foreground">אין הערות כרגע</p>
+          )}
+
         </div>
       </section>
 

@@ -22,4 +22,10 @@ export interface Insight {
   suggestion: string;
   rangeStart: number;
   rangeEnd: number;
+  // Optional extended fields for EditorAI findings
+  anchor?: string;
+  severity?: 'minor' | 'moderate' | 'critical';
+  alternatives?: string[];
+  patchBalanced?: string; // "מוצע (מאוזן)"
+  patchExtended?: string; // "מוצע (מורחב)"
 }
