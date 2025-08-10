@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const assistantId = Deno.env.get('ASSISTANT_ID');
+const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,6 +49,8 @@ serve(async (req) => {
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
+        ...(openAIProjectId ? { 'OpenAI-Project': openAIProjectId } : {}),
+        'OpenAI-Beta': 'assistants=v2',
       },
       body: JSON.stringify({
         assistant_id: assistantId,
@@ -86,6 +89,8 @@ serve(async (req) => {
       const runCheckResp = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
+          ...(openAIProjectId ? { 'OpenAI-Project': openAIProjectId } : {}),
+          'OpenAI-Beta': 'assistants=v2',
         }
       });
       const runCheckData = await runCheckResp.json();
@@ -101,7 +106,11 @@ serve(async (req) => {
 
     // Fetch the latest messages
     const msgsResp = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages?order=desc&limit=10`, {
-      headers: { 'Authorization': `Bearer ${openAIApiKey}` }
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        ...(openAIProjectId ? { 'OpenAI-Project': openAIProjectId } : {}),
+        'OpenAI-Beta': 'assistants=v2',
+      }
     });
     const msgsData = await msgsResp.json();
     if (!msgsResp.ok) {
