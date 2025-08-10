@@ -169,7 +169,26 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                   ) : (
                     ev?.quote ? (
                       <div>
-                        <div className="font-medium">ציטוט מהמסמך:</div>
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium">ציטוט מהמסמך:</div>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              onJump?.({
+                                id: `ev-${c.id}-${ev.rangeStart}-${ev.rangeEnd}`,
+                                criterionId: c.id,
+                                quote: ev.quote,
+                                explanation: '',
+                                suggestion: '',
+                                rangeStart: ev.rangeStart ?? 0,
+                                rangeEnd: ev.rangeEnd ?? 0,
+                              } as Insight)
+                            }
+                          >
+                            מצא בטקסט
+                          </Button>
+                        </div>
                         <blockquote className="text-muted-foreground bg-secondary/50 rounded p-2">“{ev.quote}”</blockquote>
                       </div>
                     ) : null

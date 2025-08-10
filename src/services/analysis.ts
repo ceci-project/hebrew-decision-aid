@@ -145,6 +145,7 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
             .replace(/[^a-z\u05d0-\u05ea0-9]+/gi, '_')
             .replace(/^_+|_+$/g, '');
           const alias: Record<string, string> = {
+            // English aliases
             field_implementation: 'field_implementation',
             'field-implementation': 'field_implementation',
             fieldimplementation: 'field_implementation',
@@ -166,6 +167,19 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
             success_metrics: 'outcomes',
             kpis: 'outcomes',
             results_metrics: 'outcomes',
+            // Hebrew aliases (normalized with underscores)
+            'יישום_בשטח': 'field_implementation',
+            'ישום_בשטח': 'field_implementation',
+            'יישום': 'field_implementation',
+            'גורם_מכריע': 'arbitrator',
+            'מכריע': 'arbitrator',
+            'שותפות_בין_מגזרית': 'cross_sector',
+            'שיתוף_בין_מגזרי': 'cross_sector',
+            'שיתוף_ציבור': 'cross_sector',
+            'מדדי_תוצאה': 'outcomes',
+            'מדדי_תוצאה_והצלחה': 'outcomes',
+            'מדדי_הצלחה': 'outcomes',
+            'תוצאות': 'outcomes',
           };
           if (alias[raw]) return alias[raw];
           if (CRITERIA_MAP[raw as keyof typeof CRITERIA_MAP]) return raw;
