@@ -78,7 +78,7 @@ const EditorPage = () => {
     URL.revokeObjectURL(url);
   };
   const scrollToInsight = (ins: Insight) => {
-    const el = document.getElementById(`hl-${ins.id}`);
+    const el = document.getElementById(`hl-${ins.criterionId}-${ins.id}`) || document.getElementById(`hl-${ins.id}`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const short = (s?: string | null) => (s ? `${s.slice(0,6)}…${s.slice(-4)}` : "");

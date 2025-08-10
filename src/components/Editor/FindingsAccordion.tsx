@@ -46,7 +46,7 @@ const FindingsAccordion: React.FC<Props> = ({ insights, onJump }) => {
             <div className="border-t">
               <Accordion type="single" collapsible>
                 {list.map((ins) => (
-                  <AccordionItem key={ins.id} value={ins.id}>
+                  <AccordionItem key={`${c.id}-${ins.id}`} value={`${c.id}-${ins.id}`}>
                     <AccordionTrigger className="px-3">
                       <div className="flex w-full items-center justify-between gap-2 text-right">
                         <div className="truncate text-sm font-medium">"{ins.quote}"</div>

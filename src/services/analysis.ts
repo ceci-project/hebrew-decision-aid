@@ -62,25 +62,45 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
     const meta = apiData?.meta as AnalysisMeta | undefined;
 
     const insights: Insight[] = raw.map((i, idx) => {
-      let rangeStart = typeof i.rangeStart === 'number' ? i.rangeStart : 0;
-      let rangeEnd = typeof i.rangeEnd === 'number' ? i.rangeEnd : 0;
+      const quote = String(i.quote ?? '');
+      const clamp = (n: number) => Math.max(0, Math.min(content.length, n));
 
-      if (!i.quote || rangeEnd <= rangeStart) {
-        const q = String(i.quote ?? '');
-        const idxPos = q ? content.indexOf(q) : -1;
-        if (idxPos >= 0) {
-          rangeStart = idxPos;
-          rangeEnd = idxPos + q.length;
-        } else {
-          rangeStart = 0;
-          rangeEnd = 0;
+      const findApprox = (q: string): { start: number; end: number } => {
+        if (!q) return { start: 0, end: 0 };
+        // exact
+        let pos = content.indexOf(q);
+        if (pos >= 0) return { start: pos, end: pos + q.length };
+        // trimmed
+        const qt = q.trim();
+        pos = qt ? content.indexOf(qt) : -1;
+        if (pos >= 0) return { start: pos, end: pos + qt.length };
+        // prefix chunk (helps when the model shortens quotes)
+        const chunk = qt.slice(0, Math.min(24, qt.length));
+        if (chunk.length >= 6) {
+          pos = content.indexOf(chunk);
+          if (pos >= 0) return { start: pos, end: clamp(pos + qt.length) };
         }
+        return { start: 0, end: 0 };
+      };
+
+      let rangeStart = typeof i.rangeStart === 'number' ? clamp(i.rangeStart) : 0;
+      let rangeEnd = typeof i.rangeEnd === 'number' ? clamp(i.rangeEnd) : 0;
+
+      const providedMatches =
+        !!quote &&
+        rangeEnd > rangeStart &&
+        content.slice(rangeStart, rangeEnd) === quote;
+
+      if (!providedMatches) {
+        const approx = findApprox(quote);
+        rangeStart = approx.start;
+        rangeEnd = approx.end;
       }
 
       return {
         id: String(i.id ?? `ai-${idx}`),
         criterionId: String(i.criterionId ?? 'timeline'),
-        quote: String(i.quote ?? ''),
+        quote,
         explanation: String(i.explanation ?? ''),
         suggestion: String(i.suggestion ?? ''),
         rangeStart,
