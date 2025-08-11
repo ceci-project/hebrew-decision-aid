@@ -299,6 +299,32 @@ Rules:
       summary = null;
     }
 
+    // Synthesize insights from criteria evidence if assistant returned none
+    if ((!insights || insights.length === 0) && Array.isArray(criteria)) {
+      const synth: any[] = [];
+      for (const c of criteria) {
+        if (Array.isArray(c.evidence) && c.evidence.length) {
+          for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
+            const e = c.evidence[k];
+            synth.push({
+              id: `${c.id}-ev-${k}`,
+              criterionId: c.id,
+              quote: String(e.quote || ''),
+              explanation: c.justification || `חיזוק: ${c.name}`,
+              suggestion: `שפרו את הסעיף "${c.name}" בהתאם לרובריקה.`,
+              rangeStart: Number.isFinite(e.rangeStart) ? e.rangeStart : 0,
+              rangeEnd: Number.isFinite(e.rangeEnd) ? e.rangeEnd : 0,
+            });
+          }
+        }
+      }
+      if (synth.length) {
+        insights = synth.slice(0, maxInsights);
+      }
+    }
+
+    console.log('assistant analysis counts', { insights: insights.length, criteria: criteria.length, summary: !!summary });
+
     return new Response(
       JSON.stringify({
         insights,

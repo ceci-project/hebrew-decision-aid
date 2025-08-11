@@ -43,7 +43,7 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
   try {
     const tryInvoke = async (fnName: string) => {
       const { data, error } = await supabase.functions.invoke(fnName, {
-        body: { content },
+        body: { content, maxInsights: 16 },
       });
       if (error) throw error;
       return data as any;
@@ -51,9 +51,9 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
 
     let apiData: any = null;
     try {
-      apiData = await tryInvoke('analyze-assistant');
-    } catch (_e) {
       apiData = await tryInvoke('analyze-openai');
+    } catch (_e) {
+      apiData = await tryInvoke('analyze-assistant');
     }
 
     const raw: any[] = Array.isArray(apiData?.insights) ? apiData.insights : [];
@@ -191,8 +191,49 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
       } satisfies Insight;
     });
 
-    insights.sort((a, b) => a.rangeStart - b.rangeStart);
-    return { insights, criteria, summary, meta };
+    // Synthesize insights from criteria evidence when missing for a criterion
+    const getDefaultSuggestion = (id: string) => {
+      const map: Record<string, string> = {
+        timeline: "הוסיפו לוח זמנים מחייב עם תאריכי יעד וסנקציות באי-עמידה.",
+        integrator: "הגדירו צוות מתכלל: הרכב, סמכויות, ותדירות ישיבות.",
+        reporting: "קבעו מנגנון דיווח: תדירות, פורמט וטיוב חריגות.",
+        evaluation: "הוסיפו מדדים ושיטת הערכה המבוצעת באופן מחזורי.",
+        external_audit: "קבעו ביקורת חיצונית, מועד וחובת פרסום.",
+        resources: "פירוט תקציב, מקורות מימון וכוח אדם נדרש.",
+        multi_levels: "הבהירו אחריות בין הדרגים והחלטות תיאום.",
+        structure: "חלקו למשימות/בעלי תפקידים עם אבני דרך ברורות.",
+        field_implementation: "תארו את היישום בשטח: מי, איך, סמכויות ופיקוח.",
+        arbitrator: "מנו גורם מכריע עם SLA לקבלת החלטות.",
+        cross_sector: "שלבו שיתוף ציבור/מגזרים רלוונטיים ותיאום בין-משרדי.",
+        outcomes: "הגדירו מדדי תוצאה ברורים ויעדי הצלחה מספריים."
+      };
+      return map[id] || "שפרו את הסעיף בהתאם לרובריקה.";
+    };
+
+    const existingByCrit = new Set(insights.map((i) => i.criterionId));
+    const synthesized: Insight[] = [];
+    for (const c of criteria) {
+      if (!existingByCrit.has(c.id) && Array.isArray(c.evidence) && c.evidence.length) {
+        for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
+          const e = c.evidence[k];
+          synthesized.push({
+            id: `${c.id}-ev-${k}`,
+            criterionId: c.id,
+            quote: String(e.quote || ''),
+            explanation: c.justification || `חיזוק: ${c.name}`,
+            suggestion: getDefaultSuggestion(c.id),
+            rangeStart: Number.isFinite((e as any).rangeStart) ? (e as any).rangeStart : 0,
+            rangeEnd: Number.isFinite((e as any).rangeEnd) ? (e as any).rangeEnd : 0,
+          });
+        }
+      }
+    }
+
+    const allInsights = [...insights, ...synthesized]
+      .sort((a, b) => a.rangeStart - b.rangeStart)
+      .slice(0, 24);
+
+    return { insights: allInsights, criteria, summary, meta };
   } catch (_err) {
 
     // Fallback: local heuristic analysis

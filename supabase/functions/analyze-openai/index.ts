@@ -92,12 +92,84 @@ Rules:
       },
       body: JSON.stringify({
         model,
-        response_format: { type: 'json_object' },
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'DecisionAnalysis',
+            strict: true,
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                criteria: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: 'string', enum: [
+                        'timeline','integrator','reporting','evaluation','external_audit','resources','multi_levels','structure','field_implementation','arbitrator','cross_sector','outcomes'
+                      ] },
+                      name: { type: 'string' },
+                      weight: { type: 'number', minimum: 0, maximum: 100 },
+                      score: { type: 'integer', minimum: 0, maximum: 5 },
+                      justification: { type: 'string' },
+                      evidence: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          additionalProperties: false,
+                          properties: {
+                            quote: { type: 'string' },
+                            rangeStart: { type: 'number' },
+                            rangeEnd: { type: 'number' }
+                          },
+                          required: ['quote','rangeStart','rangeEnd']
+                        }
+                      }
+                    },
+                    required: ['id','name','weight','score','justification']
+                  }
+                },
+                summary: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    feasibilityPercent: { type: 'number', minimum: 0, maximum: 100 },
+                    feasibilityLevel: { type: 'string', enum: ['low','medium','high'] },
+                    reasoning: { type: 'string' }
+                  },
+                  required: ['feasibilityPercent','feasibilityLevel','reasoning']
+                },
+                insights: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: 'string' },
+                      criterionId: { type: 'string', enum: [
+                        'timeline','integrator','reporting','evaluation','external_audit','resources','multi_levels','structure','field_implementation','arbitrator','cross_sector','outcomes'
+                      ] },
+                      quote: { type: 'string' },
+                      explanation: { type: 'string' },
+                      suggestion: { type: 'string' },
+                      rangeStart: { type: 'number' },
+                      rangeEnd: { type: 'number' }
+                    },
+                    required: ['criterionId','quote','explanation','suggestion','rangeStart','rangeEnd']
+                  }
+                }
+              },
+              required: ['criteria','summary','insights']
+            }
+          }
+        },
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user }
         ],
-        temperature: 0.2,
+        temperature: 0,
       }),
     });
 
@@ -118,7 +190,7 @@ Rules:
       parsed = { insights: [], criteria: [], summary: null };
     }
 
-    const insights = Array.isArray(parsed.insights)
+    let insights = Array.isArray(parsed.insights)
       ? parsed.insights.map((i: any, idx: number) => ({
           id: String(i?.id ?? `ai-${idx}`),
           criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
@@ -145,6 +217,30 @@ Rules:
         }))
       : [];
 
+    // Synthesize insights from criteria evidence if missing
+    if ((!insights || insights.length === 0) && Array.isArray(criteria)) {
+      const synth: any[] = [];
+      for (const c of criteria) {
+        if (Array.isArray(c.evidence) && c.evidence.length) {
+          for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
+            const e = c.evidence[k];
+            synth.push({
+              id: `${c.id}-ev-${k}`,
+              criterionId: c.id,
+              quote: String(e.quote || ''),
+              explanation: c.justification || `חיזוק: ${c.name}`,
+              suggestion: `שפרו את הסעיף "${c.name}" בהתאם לרובריקה.`,
+              rangeStart: Number.isFinite(e.rangeStart) ? e.rangeStart : 0,
+              rangeEnd: Number.isFinite(e.rangeEnd) ? e.rangeEnd : 0,
+            });
+          }
+        }
+      }
+      if (synth.length) {
+        insights = synth.slice(0, maxInsights);
+      }
+    }
+
     let summary = parsed?.summary && typeof parsed.summary === 'object' ? {
       feasibilityPercent: Math.max(0, Math.min(100, Number(parsed.summary.feasibilityPercent) || 0)),
       feasibilityLevel: ['low','medium','high'].includes(parsed.summary.feasibilityLevel) ? parsed.summary.feasibilityLevel : undefined,
@@ -159,6 +255,7 @@ Rules:
       summary = { feasibilityPercent: percent, feasibilityLevel: level, reasoning: summary?.reasoning || '' } as any;
     }
 
+    console.log('openai analysis counts', { insights: insights.length, criteria: criteria.length, summary: !!summary, model });
     return new Response(
       JSON.stringify({ insights, criteria, summary, meta: { source: 'openai', model } }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
