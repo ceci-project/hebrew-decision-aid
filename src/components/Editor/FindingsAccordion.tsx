@@ -60,7 +60,7 @@ const FindingsAccordion: React.FC<Props> = ({ insights, onJump }) => {
                       <div className="space-y-3">
                         {ins.explanation && (
                           <div>
-                            <div className="text-xs font-semibold">בעיה</div>
+                            <div className="text-xs font-semibold">אתגר</div>
                             <p className="text-sm text-muted-foreground leading-relaxed">{ins.explanation}</p>
                           </div>
                         )}
