@@ -15,9 +15,29 @@ export const HighlightCanvas: React.FC<Props> = ({ content, insights }) => {
   const ordered = [...insights].sort((a, b) => a.rangeStart - b.rangeStart);
 
   for (const ins of ordered) {
-    if (ins.rangeStart > cursor) {
+    const originalStart = Math.max(0, Math.min(ins.rangeStart ?? 0, content.length));
+    const originalEnd = Math.max(originalStart, Math.min(ins.rangeEnd ?? originalStart, content.length));
+
+    // Try to fix invalid or tiny ranges by matching the quote
+    let start = originalStart;
+    let end = originalEnd;
+    if (end <= start || end - start < 1) {
+      if (ins.quote) {
+        const idx = content.indexOf(ins.quote);
+        if (idx >= 0) {
+          start = idx;
+          end = idx + ins.quote.length;
+        }
+      }
+    }
+
+    // Prevent overlapping duplication in rendering
+    const displayStart = Math.max(start, cursor);
+    const displayEnd = Math.max(displayStart, end);
+
+    if (displayStart > cursor) {
       nodes.push(
-        <span key={`t-${cursor}`}>{content.slice(cursor, ins.rangeStart)}</span>
+        <span key={`t-${cursor}`}>{content.slice(cursor, displayStart)}</span>
       );
     }
 
@@ -28,17 +48,21 @@ export const HighlightCanvas: React.FC<Props> = ({ content, insights }) => {
       <mark
         id={spanId}
         key={ins.id}
-        className="rounded-sm px-0.5 py-0.5"
+        data-crit={ins.criterionId}
+        data-ins={ins.id}
+        data-start={start}
+        data-end={end}
+        className="rounded-sm px-0.5 py-0.5 scroll-mt-24"
         style={{
           background: `hsl(var(${crit.colorVar}))`,
           color: "inherit",
         }}
         title={`${crit.name}: ${ins.explanation}`}
       >
-        {content.slice(ins.rangeStart, ins.rangeEnd)}
+        {content.slice(displayStart, displayEnd)}
       </mark>
     );
-    cursor = ins.rangeEnd;
+    cursor = displayEnd;
   }
 
   if (cursor < content.length) {

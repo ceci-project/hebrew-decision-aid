@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { storage } from "@/services/storage";
 import { analyzeDocument } from "@/services/analysis";
@@ -31,6 +31,7 @@ const EditorPage = () => {
   const [meta, setMeta] = useState<AnalysisMeta | undefined>(undefined);
   const [criteria, setCriteria] = useState<Array<{ id: string; name: string; weight: number; score: number; justification: string }>>([]);
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!doc) {
@@ -79,17 +80,56 @@ const EditorPage = () => {
     URL.revokeObjectURL(url);
   };
   const scrollToInsight = (ins: Insight) => {
-    // Ensure canvas is visible before scrolling
     setTab("canvas");
+    // Wait for tab to render before querying DOM
     requestAnimationFrame(() => {
-      const el =
-        document.getElementById(`hl-${ins.criterionId}-${ins.id}`) ||
-        document.getElementById(`hl-${ins.id}`);
+      const container = (document.getElementById("canvas-scroll") as HTMLDivElement | null) ?? canvasRef.current;
+
+      const findElement = (): HTMLElement | null => {
+        // 1) by deterministic ID
+        const byId =
+          document.getElementById(`hl-${ins.criterionId}-${ins.id}`) ||
+          document.getElementById(`hl-${ins.id}`);
+        if (byId) return byId as HTMLElement;
+
+        // 2) by data-ins within container
+        const byData = container?.querySelector<HTMLElement>(`mark[data-ins="${ins.id}"]`);
+        if (byData) return byData;
+
+        // 3) nearest by rangeStart
+        if (container) {
+          const marks = Array.from(container.querySelectorAll<HTMLElement>("mark[data-start]"));
+          let best: HTMLElement | null = null;
+          let bestDelta = Number.POSITIVE_INFINITY;
+          for (const m of marks) {
+            const s = parseInt(m.dataset.start || "0", 10);
+            const delta = Math.abs((ins.rangeStart ?? 0) - s);
+            if (delta < bestDelta) {
+              best = m;
+              bestDelta = delta;
+            }
+          }
+          if (best) return best;
+        }
+        return null;
+      };
+
+      const el = findElement();
       if (!el) return;
-      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+
+      // Prefer scrolling inside the canvas container
+      if (container) {
+        const rect = el.getBoundingClientRect();
+        const crect = container.getBoundingClientRect();
+        const targetTop = rect.top - crect.top + container.scrollTop - crect.height / 2 + rect.height / 2;
+        container.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+      } else {
+        el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      }
+
       // Temporary visual focus
       el.classList.add("ring-2", "ring-primary/50", "transition-shadow");
-      setTimeout(() => el.classList.remove("ring-2", "ring-primary/50", "transition-shadow"), 1200);
+      setTimeout(() => el.classList.remove("ring-2", "ring-primary/50", "transition-shadow"), 1300);
     });
   };
   const short = (s?: string | null) => (s ? `${s.slice(0,6)}…${s.slice(-4)}` : "");
@@ -170,7 +210,7 @@ const EditorPage = () => {
             <TabsTrigger value="edit">מצב עריכה</TabsTrigger>
           </TabsList>
           <TabsContent value="canvas" className="mt-4">
-            <div className="rounded-lg border p-5 max-h-[75vh] overflow-auto bg-card">
+            <div id="canvas-scroll" ref={canvasRef} className="rounded-lg border p-5 max-h-[75vh] overflow-auto bg-card">
               <HighlightCanvas content={doc.content} insights={insights} />
             </div>
           </TabsContent>
