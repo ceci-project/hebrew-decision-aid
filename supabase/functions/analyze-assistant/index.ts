@@ -35,7 +35,7 @@ serve(async (req) => {
 
   try {
     const { content, maxInsights = 8, outputScores = false } = await req.json();
-...
+
     if (!content || typeof content !== 'string' || !content.trim()) {
       return new Response(
         JSON.stringify({ insights: [], criteria: [], summary: null }),
