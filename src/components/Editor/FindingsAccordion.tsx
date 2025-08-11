@@ -49,7 +49,18 @@ const FindingsAccordion: React.FC<Props> = ({ insights, onJump }) => {
                   <AccordionItem key={`${c.id}-${ins.id}`} value={`${c.id}-${ins.id}`}>
                     <AccordionTrigger className="px-3">
                       <div className="flex w-full items-center justify-between gap-2 text-right">
-                        <div className="truncate text-sm font-medium">"{ins.quote}"</div>
+                        <div
+                          className="truncate text-sm font-medium cursor-pointer hover:underline"
+                          title={ins.quote}
+                          role="button"
+                          tabIndex={0}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onJump?.(ins); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onJump?.(ins); } }}
+                        >
+                          "{ins.quote}"
+                        </div>
                         <div className="flex items-center gap-2">
                           <SeverityBadge level={ins.severity} />
                           <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onJump?.(ins); }}>מצא בטקסט</Button>
