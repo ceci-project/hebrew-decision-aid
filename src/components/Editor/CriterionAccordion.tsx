@@ -102,8 +102,10 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                                   <div
                                     className="truncate text-sm font-medium cursor-pointer hover:underline"
                                     title={ins.quote}
-                                    onClick={() => onJump?.(ins)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onJump?.(ins); } }}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onJump?.(ins); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onJump?.(ins); } }}
                                   >
                                     "{ins.quote}"
                                   </div>
