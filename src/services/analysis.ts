@@ -43,7 +43,7 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
   try {
     const tryInvoke = async (fnName: string) => {
       const { data, error } = await supabase.functions.invoke(fnName, {
-        body: { content, maxInsights: 16 },
+        body: { content, maxInsights: 24, outputScores: false },
       });
       if (error) throw error;
       return data as any;
@@ -51,9 +51,9 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
 
     let apiData: any = null;
     try {
-      apiData = await tryInvoke('analyze-openai');
-    } catch (_e) {
       apiData = await tryInvoke('analyze-assistant');
+    } catch (_e) {
+      apiData = await tryInvoke('analyze-openai');
     }
 
     const raw: any[] = Array.isArray(apiData?.insights) ? apiData.insights : [];
