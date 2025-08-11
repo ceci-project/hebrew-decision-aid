@@ -82,8 +82,8 @@ Rules:
 
     const user = `Content (UTF-8 Hebrew allowed):\n"""${content}"""`;
 
-    const model = 'gpt-4.1-2025-04-14';
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    const model = 'gpt-4.1';
+    let resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
@@ -173,13 +173,46 @@ Rules:
       }),
     });
 
-    const data = await resp.json();
+    let data = await resp.json();
     if (!resp.ok) {
-      console.error('OpenAI error', data);
-      return new Response(
-        JSON.stringify({ error: data.error?.message || 'OpenAI error' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      const msg = String(data?.error?.message || '');
+      const needsFallback = msg.toLowerCase().includes('response_format') || msg.toLowerCase().includes('json_schema');
+      if (needsFallback) {
+        const resp2 = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+            'Content-Type': 'application/json',
+            ...(openAIProjectId ? { 'OpenAI-Project': openAIProjectId } : {}),
+          },
+          body: JSON.stringify({
+            model,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user }
+            ],
+            temperature: 0,
+          }),
+        });
+        const data2 = await resp2.json();
+        if (resp2.ok) {
+          resp = resp2;
+          data = data2;
+        } else {
+          console.error('OpenAI error (fallback failed)', data2);
+          return new Response(
+            JSON.stringify({ error: data2.error?.message || 'OpenAI error (fallback failed)' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        console.error('OpenAI error', data);
+        return new Response(
+          JSON.stringify({ error: data.error?.message || 'OpenAI error' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     const text = data.choices?.[0]?.message?.content || '{}';
