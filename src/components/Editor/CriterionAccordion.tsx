@@ -97,23 +97,21 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                       <Accordion type="single" collapsible>
                         {critInsights.map((ins) => (
                           <AccordionItem key={`${c.id}-${ins.id}`} value={`${c.id}-${ins.id}`}>
-                            <AccordionTrigger className="px-2">
-                              <div className="flex w-full items-center justify-between gap-2 text-right">
-                                <div className="truncate text-sm font-medium">"{ins.quote}"</div>
-        <div className="flex items-center gap-2">
-          <SeverityBadge level={ins.severity} />
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); onJump?.(ins); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onJump?.(ins); } }}
-            className="inline-flex items-center rounded px-2 py-1 text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer select-none"
-          >
-            מצא בטקסט
-          </span>
-        </div>
-                              </div>
-                            </AccordionTrigger>
+                              <AccordionTrigger className="px-2">
+                                <div className="flex w-full items-center justify-between gap-2 text-right">
+                                  <div
+                                    className="truncate text-sm font-medium cursor-pointer hover:underline"
+                                    title={ins.quote}
+                                    onClick={() => onJump?.(ins)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onJump?.(ins); } }}
+                                  >
+                                    "{ins.quote}"
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <SeverityBadge level={ins.severity} />
+                                  </div>
+                                </div>
+                              </AccordionTrigger>
                             <AccordionContent className="px-2">
                               <div className="space-y-3">
                                 {ins.explanation && (
