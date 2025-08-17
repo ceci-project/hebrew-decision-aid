@@ -51,9 +51,19 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
 
     let apiData: any = null;
     try {
+      console.log('Trying analyze-assistant...');
       apiData = await tryInvoke('analyze-assistant');
-    } catch (_e) {
-      apiData = await tryInvoke('analyze-openai');
+      console.log('analyze-assistant succeeded:', apiData);
+    } catch (e) {
+      console.log('analyze-assistant failed:', e);
+      console.log('Trying analyze-openai...');
+      try {
+        apiData = await tryInvoke('analyze-openai');
+        console.log('analyze-openai succeeded:', apiData);
+      } catch (e2) {
+        console.log('analyze-openai failed:', e2);
+        throw e2;
+      }
     }
 
     const raw: any[] = Array.isArray(apiData?.insights) ? apiData.insights : [];
