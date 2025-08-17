@@ -1,8 +1,11 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
+// Read secrets inside the function to ensure they're available
+const getSecrets = () => ({
+  openAIApiKey: Deno.env.get('OPENAI_API_KEY'),
+  openAIProjectId: Deno.env.get('OPENAI_PROJECT_ID')
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,7 +36,17 @@ serve(async (req) => {
   try {
     const { content, maxInsights = 8 } = await req.json();
 
+    // Get secrets at runtime
+    const { openAIApiKey, openAIProjectId } = getSecrets();
+
+    // Debug: Check environment variables first
+    console.log('Environment check (analyze-openai):', {
+      hasOpenaiKey: !!openAIApiKey,
+      openaiKeyLength: openAIApiKey?.length || 0,
+    });
+
     if (!openAIApiKey) {
+      console.error('Missing OPENAI_API_KEY');
       return new Response(
         JSON.stringify({ error: 'Missing OPENAI_API_KEY' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
