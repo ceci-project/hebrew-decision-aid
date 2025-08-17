@@ -50,6 +50,18 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
     };
 
     let apiData: any = null;
+    
+    // First test if functions work at all
+    try {
+      console.log('Testing simple function...');
+      const { data: testData, error: testError } = await supabase.functions.invoke('test-simple', {
+        body: { test: true },
+      });
+      console.log('test-simple result:', testData, testError);
+    } catch (e) {
+      console.log('test-simple failed:', e);
+    }
+    
     try {
       console.log('Trying analyze-assistant...');
       apiData = await tryInvoke('analyze-assistant');
