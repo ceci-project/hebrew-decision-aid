@@ -398,7 +398,13 @@ END DECISION`;
       insights = insights.slice(0, maxInsights);
     }
 
-    console.log('assistant analysis counts', { insights: insights.length, criteria: criteria.length, summary: !!summary });
+    console.log('FINAL RESULTS:', {
+      assistantResponse: textContent.substring(0, 500),
+      insights: insights.length,
+      criteria: criteria.length,
+      summary: !!summary,
+      parsedContent: JSON.stringify({ insights, criteria, summary }).substring(0, 500)
+    });
 
     return new Response(
       JSON.stringify({
