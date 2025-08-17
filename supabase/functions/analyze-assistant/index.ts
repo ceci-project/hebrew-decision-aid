@@ -114,7 +114,12 @@ CONSTRAINTS
  
 READY`;
 
-    const user = `${editorPrompt}\n\nsql\nCopyEdit\nBEGIN DECISION\n${content}\nEND DECISION`;
+    // Send only the formatted text - prompt should be in Assistant settings
+    const user = `BEGIN DECISION
+${content}
+END DECISION`;
+
+    console.log('Sending text to assistant:', user.substring(0, 200) + '...');
 
     // Create a thread and run with the Assistant (no extra instructions; prompt is self-contained)
     const runCreateResp = await fetch('https://api.openai.com/v1/threads/runs', {
