@@ -13,6 +13,27 @@ const Index = () => {
 
   const handlePick = () => inputRef.current?.click();
 
+  const createNewDocument = () => {
+    setBusy(true);
+    try {
+      const now = new Date().toISOString();
+      const doc: DecisionDocument = {
+        id: String(Date.now()),
+        title: "מסמך חדש",
+        content: "",
+        createdAt: now,
+        updatedAt: now,
+      };
+      storage.saveDocument(doc);
+      toast({ title: "מסמך חדש נוצר", description: "מעבירים למסך העורך" });
+      navigate(`/editor/${doc.id}`);
+    } catch (e) {
+      toast({ title: "שגיאה ביצירת מסמך", description: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onFile = async (file?: File) => {
     if (!file) return;
     setBusy(true);
@@ -71,16 +92,22 @@ const Index = () => {
               <Button 
                 variant="outline" 
                 className="px-6 py-3 text-gray-700 border-gray-300 hover:bg-gray-50"
-                onClick={handlePick}
+                onClick={createNewDocument}
                 disabled={busy}
               >
-                + מסמך חדש
+                <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                מסמך חדש
               </Button>
               <Button 
                 className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={handlePick}
                 disabled={busy}
               >
+                <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
                 {busy ? "טוען..." : "בחר קובץ"}
               </Button>
             </div>
