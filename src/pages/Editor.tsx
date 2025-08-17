@@ -138,96 +138,179 @@ const EditorPage = () => {
   if (!doc) return null;
 
   return (
-    <div dir="rtl" className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <section className="lg:col-span-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <Input
-            value={doc.title}
-            onChange={(e) => {
-              const updated = { ...doc, title: e.target.value, updatedAt: new Date().toISOString() };
-              setDoc(updated);
-              storage.saveDocument(updated);
-            }}
-            placeholder="כותרת המסמך"
-          />
-          <Button onClick={onReanalyze} disabled={loading} variant="default">
-            {loading ? "מנתח..." : "נתח מחדש"}
-          </Button>
-          <Button onClick={onExportDocx} variant="secondary">ייצוא DOCX</Button>
+    <div dir="rtl" className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate("/")}
+              className="flex items-center text-gray-600 hover:text-gray-900"
+            >
+              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
+              חזרה
+            </button>
+            <div>
+              <h1 className="text-lg font-semibold text-gray-900">{doc.title}</h1>
+              <p className="text-sm text-gray-500">עודכן: {new Date(doc.updatedAt).toLocaleDateString('he-IL')}</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <Button onClick={onExportDocx} variant="outline" size="sm">
+              יציאת DOCX
+            </Button>
+            <Button onClick={onReanalyze} disabled={loading} variant="outline" size="sm">
+              {loading ? "מתחת..." : "מתחת..."}
+            </Button>
+            <Button onClick={onReanalyze} disabled={loading} variant="default" size="sm">
+              {loading ? "ניתוח מחדש" : "ניתוח מחדש"}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex">
+        {/* Main Content */}
+        <div className="flex-1 p-6">
+          <div className="max-w-4xl">
+            {/* Document Title Section */}
+            <div className="mb-6">
+              <div className="flex items-center gap-4 mb-4">
+                <h2 className="text-xl font-medium text-gray-900">עריכת המסמך</h2>
+                <span className="text-sm text-gray-500">{doc.title}</span>
+              </div>
+              
+              {summary && (
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="text-sm text-blue-800">
+                    <strong>ניתוח מחדש</strong>
+                    <br />
+                    לחץ כדי לנתח מחדש את המסמך עם השינויים שביצעת
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Word Count */}
+            <div className="mb-4 text-sm text-gray-500">
+              מספר תווים: {doc.content.length.toLocaleString()}
+            </div>
+
+            {/* Main Text Editor */}
+            <div className="bg-white rounded-lg border-2 border-blue-300 p-6">
+              <Input
+                value={doc.title}
+                onChange={(e) => {
+                  const updated = { ...doc, title: e.target.value, updatedAt: new Date().toISOString() };
+                  setDoc(updated);
+                  storage.saveDocument(updated);
+                }}
+                placeholder="כותרת ההחלטה"
+                className="mb-4 text-lg font-medium border-0 border-b border-gray-200 rounded-none px-0 focus:ring-0 focus:border-blue-500"
+              />
+              
+              <Textarea
+                className="min-h-[60vh] border-0 resize-none focus:ring-0 text-base leading-relaxed"
+                value={doc.content}
+                onChange={(e) => {
+                  const updated = { ...doc, content: e.target.value, updatedAt: new Date().toISOString() };
+                  setDoc(updated);
+                  storage.saveDocument(updated);
+                }}
+                placeholder="כתבו או הדביקו את טקסט ההחלטה כאן..."
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-lg border p-3 max-h-[65vh] overflow-auto">
-          {meta && (
-            <div className="mb-2 text-[11px] text-muted-foreground">
-              {meta.source === 'assistants' ? (
-                <span>
-                  מופעל ע״י OpenAI Assistant
-                  {meta.assistantId ? ` • ${short(meta.assistantId)}` : ''}
-                  {meta.runId ? ` • ריצה ${short(meta.runId)}` : ''}
-                  {meta.model ? ` • ${meta.model}` : ''}
-                </span>
-              ) : meta.source === 'openai' ? (
-                <span>
-                  מופעל ע״י OpenAI
-                  {meta.model ? ` • ${meta.model}` : ''}
-                </span>
+        {/* Right Sidebar */}
+        <div className="w-80 bg-gray-50 border-l border-gray-200 p-6">
+          <div className="space-y-6">
+            {/* Quick Summary */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">סיכום מהיר</h3>
+              
+              {criteria.length > 0 ? (
+                <div className="space-y-3">
+                  {CRITERIA.map((criterion) => {
+                    const criterionData = criteria.find(c => c.id === criterion.id);
+                    const score = criterionData?.score ?? 0;
+                    const insightCount = insights.filter(ins => ins.criterionId === criterion.id).length;
+                    
+                    return (
+                      <div key={criterion.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: `var(${criterion.colorVar})` }}
+                          />
+                          <span className="text-sm text-gray-700">{criterion.name}:</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-medium text-gray-900">{insightCount}</span>
+                          {score > 0 && (
+                            <span className="text-xs text-gray-500">({score}/10)</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                <span>מופעל ע״י ניתוח מקומי</span>
+                <p className="text-sm text-gray-500">אין נתונים להצגה - הריצו ניתוח</p>
               )}
             </div>
-          )}
-          {summary && (
-            <div className="mb-3 rounded-md border p-3 bg-secondary/30">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-semibold">ציון ישימות משוקלל</span>
-                <span className="font-medium">
-                  {summary.feasibilityPercent}% • {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 'ישימות גבוהה'}
-                </span>
-              </div>
-              <div className="mt-2">
-                <Progress value={summary.feasibilityPercent} />
-              </div>
-              {summary.reasoning && (
-                <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{summary.reasoning}</p>
-              )}
-            </div>
-          )}
-          {criteria.length > 0 ? (
-            <div className="mb-3">
-              <CriterionAccordion criteriaData={criteria} insights={insights} onJump={scrollToInsight} />
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">אין קריטריונים להצגה</p>
-          )}
 
+            {/* Feasibility Score */}
+            {summary && (
+              <div className="border-t border-gray-200 pt-6">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">ציון כללי:</h4>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-gray-900 mb-1">
+                    {summary.feasibilityPercent}%
+                  </div>
+                  <div className="text-sm text-gray-500 mb-3">
+                    {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : 
+                     summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 
+                     'ישימות גבוהה'}
+                  </div>
+                  <Progress value={summary.feasibilityPercent} className="h-2" />
+                </div>
+                
+                {summary.reasoning && (
+                  <p className="mt-4 text-xs text-gray-600 leading-relaxed">
+                    {summary.reasoning}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Analysis Meta */}
+            {meta && (
+              <div className="border-t border-gray-200 pt-4">
+                <div className="text-xs text-gray-500">
+                  {meta.source === 'assistants' ? (
+                    <span>
+                      מופעל ע״י OpenAI Assistant
+                      {meta.model ? ` • ${meta.model}` : ''}
+                    </span>
+                  ) : meta.source === 'openai' ? (
+                    <span>
+                      מופעל ע״י OpenAI
+                      {meta.model ? ` • ${meta.model}` : ''}
+                    </span>
+                  ) : (
+                    <span>מופעל ע״י ניתוח מקומי</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </section>
-
-      <section className="lg:col-span-8">
-        <Tabs value={tab} onValueChange={setTab} dir="rtl">
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="canvas">מצב קנבס</TabsTrigger>
-            <TabsTrigger value="edit">מצב עריכה</TabsTrigger>
-          </TabsList>
-          <TabsContent value="canvas" className="mt-4">
-            <div id="canvas-scroll" ref={canvasRef} className="rounded-lg border p-5 max-h-[75vh] overflow-auto bg-card">
-              <HighlightCanvas content={doc.content} insights={insights} />
-            </div>
-          </TabsContent>
-          <TabsContent value="edit" className="mt-4">
-            <Textarea
-              className="min-h-[70vh]"
-              value={doc.content}
-              onChange={(e) => {
-                const updated = { ...doc, content: e.target.value, updatedAt: new Date().toISOString() };
-                setDoc(updated);
-                storage.saveDocument(updated);
-              }}
-              placeholder="כתבו או ערכו את טקסט ההחלטה כאן..."
-            />
-          </TabsContent>
-        </Tabs>
-      </section>
+      </div>
     </div>
   );
 };
