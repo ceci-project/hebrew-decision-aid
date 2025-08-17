@@ -36,6 +36,40 @@ serve(async (req) => {
   try {
     const { content, maxInsights = 8, outputScores = false } = await req.json();
 
+    // Debug: Check environment variables first
+    console.log('Environment check:', {
+      hasOpenaiKey: !!openAIApiKey,
+      openaiKeyLength: openAIApiKey?.length || 0,
+      hasAssistantId: !!assistantId,
+      assistantIdLength: assistantId?.length || 0,
+      assistantIdValue: assistantId || 'UNDEFINED'
+    });
+
+    // Validate required environment variables
+    if (!openAIApiKey) {
+      console.error('Missing OPENAI_API_KEY');
+      return new Response(
+        JSON.stringify({ error: 'OPENAI_API_KEY environment variable is not set' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (!assistantId) {
+      console.error('Missing ASSISTANT_ID');
+      return new Response(
+        JSON.stringify({ error: 'ASSISTANT_ID environment variable is not set' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (assistantId.trim() === '') {
+      console.error('Empty ASSISTANT_ID');
+      return new Response(
+        JSON.stringify({ error: 'ASSISTANT_ID environment variable is empty' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (!content || typeof content !== 'string' || !content.trim()) {
       return new Response(
         JSON.stringify({ insights: [], criteria: [], summary: null }),
