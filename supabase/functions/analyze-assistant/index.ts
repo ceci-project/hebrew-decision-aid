@@ -32,13 +32,18 @@ const ALLOWED_CRITERIA = [
 type AllowedId = typeof ALLOWED_CRITERIA[number];
 
 serve(async (req) => {
+  console.log('analyze-assistant function started, method:', req.method, 'time:', new Date().toISOString());
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('Handling CORS preflight for analyze-assistant');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log('Parsing request body...');
     const { content, maxInsights = 8, outputScores = false } = await req.json();
+    console.log('Request parsed - content length:', content?.length || 0, 'maxInsights:', maxInsights, 'outputScores:', outputScores);
 
     // Get secrets at runtime
     const { openAIApiKey, assistantId, openAIProjectId } = getSecrets();

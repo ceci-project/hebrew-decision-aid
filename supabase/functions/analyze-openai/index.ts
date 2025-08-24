@@ -29,13 +29,18 @@ const ALLOWED_CRITERIA = [
 ] as const;
 
 serve(async (req) => {
+  console.log('analyze-openai function started, method:', req.method, 'time:', new Date().toISOString());
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('Handling CORS preflight for analyze-openai');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log('Parsing request body...');
     const { content, maxInsights = 8 } = await req.json();
+    console.log('Request parsed - content length:', content?.length || 0, 'maxInsights:', maxInsights);
 
     // Get secrets at runtime
     const { openAIApiKey, openAIProjectId } = getSecrets();

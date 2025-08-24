@@ -7,7 +7,10 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  console.log('test-simple function started, method:', req.method);
+  
   if (req.method === 'OPTIONS') {
+    console.log('Handling CORS preflight');
     return new Response(null, { headers: corsHeaders });
   }
 
@@ -24,21 +27,30 @@ serve(async (req) => {
       assistantIdLength: assistantId?.length || 0
     });
 
+    const response = {
+      success: true,
+      message: 'Function working perfectly',
+      timestamp: new Date().toISOString(),
+      secrets: {
+        hasOpenaiKey: !!openAIApiKey,
+        hasAssistantId: !!assistantId
+      }
+    };
+
+    console.log('Sending response:', response);
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Function working',
-        secrets: {
-          hasOpenaiKey: !!openAIApiKey,
-          hasAssistantId: !!assistantId
-        }
-      }),
+      JSON.stringify(response),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error in test-simple:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

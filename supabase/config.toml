@@ -1,5 +1,8 @@
 project_id = "zdjlrxcsqicbumjgsern"
 
+[functions.test-simple]
+verify_jwt = false
+
 [functions.analyze-openai]
 verify_jwt = false
 
