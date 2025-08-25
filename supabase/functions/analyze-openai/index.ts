@@ -164,7 +164,7 @@ Rules:
                         }
                       }
                     },
-                    required: ['id','name','weight','score','justification']
+                    required: ['id','name','weight','score','justification','evidence']
                   }
                 },
                 summary: {
