@@ -17,8 +17,14 @@ serve(async (req) => {
   try {
     console.log('test-simple function called');
     
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    const assistantId = Deno.env.get('ASSISTANT_ID');
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY_SECRET') || Deno.env.get('openai_api_key');
+    const assistantId = Deno.env.get('ASSISTANT_ID') || Deno.env.get('ASSISTANT_ID_SECRET') || Deno.env.get('assistant_id');
+    
+    // Show all available environment keys for debugging
+    const allKeys = Object.keys(Deno.env.toObject()).filter(k => 
+      k.toLowerCase().includes('openai') || k.toLowerCase().includes('assistant')
+    );
+    console.log('Available environment keys:', allKeys);
     
     console.log('Secrets check:', {
       hasOpenaiKey: !!openAIApiKey,
