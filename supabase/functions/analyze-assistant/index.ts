@@ -2,12 +2,10 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// Read secrets inside the function to ensure they're available
-const getSecrets = () => ({
-  openAIApiKey: Deno.env.get('OPENAI_API_KEY'),
-  assistantId: Deno.env.get('ASSISTANT_ID'),
-  openAIProjectId: Deno.env.get('OPENAI_PROJECT_ID')
-});
+// Read secrets at the start to ensure they're available
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const assistantId = Deno.env.get('ASSISTANT_ID'); 
+const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,8 +43,8 @@ serve(async (req) => {
     const { content, maxInsights = 8, outputScores = false } = await req.json();
     console.log('Request parsed - content length:', content?.length || 0, 'maxInsights:', maxInsights, 'outputScores:', outputScores);
 
-    // Get secrets at runtime
-    const { openAIApiKey, assistantId, openAIProjectId } = getSecrets();
+    // Check secrets availability
+    console.log('Checking secrets availability...');
 
     // Debug: Check environment variables first
     console.log('Environment check:', {
