@@ -2,10 +2,19 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// Read secrets at the start to ensure they're available
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const assistantId = Deno.env.get('ASSISTANT_ID'); 
-const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
+console.log('Loading secrets...');
+
+// Try all possible secret names and log what we find
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY_SECRET') || Deno.env.get('openai_api_key');
+const assistantId = Deno.env.get('ASSISTANT_ID') || Deno.env.get('ASSISTANT_ID_SECRET') || Deno.env.get('assistant_id');
+const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID') || Deno.env.get('OPENAI_PROJECT_ID_SECRET') || Deno.env.get('openai_project_id');
+
+console.log('Secrets loaded at startup:', {
+  openaiKey: openAIApiKey ? `${openAIApiKey.substring(0, 8)}...` : 'MISSING',
+  assistantId: assistantId ? `${assistantId.substring(0, 8)}...` : 'MISSING',
+  projectId: openAIProjectId ? `${openAIProjectId.substring(0, 8)}...` : 'MISSING',
+  allEnvKeys: Object.keys(Deno.env.toObject()).filter(k => k.toLowerCase().includes('openai') || k.toLowerCase().includes('assistant'))
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
