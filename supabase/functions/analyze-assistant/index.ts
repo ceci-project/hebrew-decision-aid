@@ -1,31 +1,9 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-console.log('Loading secrets for analyze-assistant...');
-
-// Get all environment variables to debug
-const allEnv = Deno.env.toObject();
-console.log('All environment keys:', Object.keys(allEnv));
-console.log('ASSISTANT_ID debug:', {
-  ASSISTANT_ID: Deno.env.get('ASSISTANT_ID'),
-  ASSISTANT_ID_length: Deno.env.get('ASSISTANT_ID')?.length || 0,
-  direct_value: allEnv['ASSISTANT_ID'],
-  all_assistant_keys: Object.keys(allEnv).filter(key => key.toLowerCase().includes('assistant'))
-});
-
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY_SECRET') || Deno.env.get('openai_api_key');
-const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID') || Deno.env.get('OPENAI_PROJECT_ID_SECRET') || Deno.env.get('openai_project_id');
-const assistantId = Deno.env.get('ASSISTANT_ID') || Deno.env.get('ASSISTANT_ID_SECRET') || Deno.env.get('assistant_id');
-
-console.log('Secrets loaded at startup:', {
-  openaiKey: openAIApiKey ? `${openAIApiKey.substring(0, 8)}...` : 'MISSING',
-  projectId: openAIProjectId ? `${openAIProjectId.substring(0, 8)}...` : 'MISSING',
-  assistantId: assistantId ? `${assistantId.substring(0, 8)}...` : 'MISSING',
-  assistantIdLength: assistantId ? assistantId.length : 0,
-  allEnvKeys: Object.keys(Deno.env.toObject()).filter(k => 
-    k.toLowerCase().includes('openai') || k.toLowerCase().includes('assistant')
-  )
-});
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
+const assistantId = Deno.env.get('ASSISTANT_ID');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,32 +26,18 @@ const ALLOWED_CRITERIA = [
 ] as const;
 
 serve(async (req) => {
-  console.log('analyze-assistant function started, method:', req.method, 'time:', new Date().toISOString());
-  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    console.log('Handling CORS preflight for analyze-assistant');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('Parsing request body...');
     const { content, maxInsights = 8 } = await req.json();
-    console.log('Request parsed - content length:', content?.length || 0, 'maxInsights:', maxInsights);
 
     // Check required secrets
-    if (!openAIApiKey) {
-      console.error('Missing OPENAI_API_KEY');
+    if (!openAIApiKey || !assistantId) {
       return new Response(
-        JSON.stringify({ error: 'Missing OPENAI_API_KEY' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!assistantId) {
-      console.error('Missing ASSISTANT_ID');
-      return new Response(
-        JSON.stringify({ error: 'Missing ASSISTANT_ID' }),
+        JSON.stringify({ error: 'Missing required API keys' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -84,9 +48,6 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    console.log('📤 Creating thread with OpenAI Assistants API...');
-    const requestStartTime = Date.now();
 
     // Step 1: Create a thread
     const threadResponse = await fetch('https://api.openai.com/v1/threads', {
@@ -100,14 +61,12 @@ serve(async (req) => {
     });
 
     if (!threadResponse.ok) {
-      const threadError = await threadResponse.json();
-      console.error('❌ Failed to create thread:', threadError);
-      throw new Error(`Failed to create thread: ${threadError.error?.message}`);
+      const threadError = await threadResponse.json().catch(() => ({}));
+      throw new Error(`Failed to create thread: ${threadError.error?.message || 'Unknown error'}`);
     }
 
     const thread = await threadResponse.json();
     const threadId = thread.id;
-    console.log('✅ Thread created:', threadId);
 
     // Step 2: Add a message to the thread
     const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
@@ -138,12 +97,9 @@ ${content}
     });
 
     if (!messageResponse.ok) {
-      const messageError = await messageResponse.json();
-      console.error('❌ Failed to create message:', messageError);
-      throw new Error(`Failed to create message: ${messageError.error?.message}`);
+      const messageError = await messageResponse.json().catch(() => ({}));
+      throw new Error(`Failed to create message: ${messageError.error?.message || 'Unknown error'}`);
     }
-
-    console.log('✅ Message added to thread');
 
     // Step 3: Run the assistant
     const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
@@ -159,41 +115,44 @@ ${content}
     });
 
     if (!runResponse.ok) {
-      const runError = await runResponse.json();
-      console.error('❌ Failed to create run:', runError);
-      throw new Error(`Failed to create run: ${runError.error?.message}`);
+      const runError = await runResponse.json().catch(() => ({}));
+      throw new Error(`Failed to create run: ${runError.error?.message || 'Unknown error'}`);
     }
 
     const run = await runResponse.json();
     const runId = run.id;
-    console.log('✅ Run created:', runId);
 
     // Step 4: Poll for completion
     let runStatus = run.status;
     let attempts = 0;
-    const maxAttempts = 60; // 1 minute timeout
+    const maxAttempts = 15; // 30 seconds timeout (15 * 2 seconds)
 
     while (['queued', 'in_progress'].includes(runStatus) && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
       attempts++;
 
-      const statusResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'OpenAI-Beta': 'assistants=v2',
-        },
-      });
+      try {
+        const statusResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+            'OpenAI-Beta': 'assistants=v2',
+          },
+        });
 
-      if (statusResponse.ok) {
-        const statusData = await statusResponse.json();
-        runStatus = statusData.status;
-        console.log(`⏳ Run status: ${runStatus} (attempt ${attempts})`);
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          runStatus = statusData.status;
+        } else {
+          // Network error - exit early
+          throw new Error('Network error during status check');
+        }
+      } catch (error) {
+        throw new Error(`Status check failed: ${error.message}`);
       }
     }
 
     if (runStatus !== 'completed') {
-      console.error('❌ Run did not complete:', runStatus);
-      throw new Error(`Run failed with status: ${runStatus}`);
+      throw new Error(`Analysis timed out or failed with status: ${runStatus}`);
     }
 
     // Step 5: Get the messages
@@ -205,9 +164,8 @@ ${content}
     });
 
     if (!messagesResponse.ok) {
-      const messagesError = await messagesResponse.json();
-      console.error('❌ Failed to get messages:', messagesError);
-      throw new Error(`Failed to get messages: ${messagesError.error?.message}`);
+      const messagesError = await messagesResponse.json().catch(() => ({}));
+      throw new Error(`Failed to get messages: ${messagesError.error?.message || 'Unknown error'}`);
     }
 
     const messages = await messagesResponse.json();
@@ -218,14 +176,6 @@ ${content}
     }
 
     const responseText = assistantMessage.content[0].text.value;
-    const requestDuration = Date.now() - requestStartTime;
-    
-    console.log('📥 Assistant response received:', {
-      duration: `${requestDuration}ms`,
-      threadId,
-      runId,
-      timestamp: new Date().toISOString()
-    });
 
     // Parse the response
     let parsed: any;
@@ -235,7 +185,6 @@ ${content}
       const jsonText = jsonMatch ? jsonMatch[0] : responseText;
       parsed = JSON.parse(jsonText);
     } catch (_e) {
-      console.error('Failed to parse assistant response as JSON:', responseText);
       parsed = { insights: [], criteria: [], summary: null };
     }
 
@@ -305,14 +254,6 @@ ${content}
       summary = { feasibilityPercent: percent, feasibilityLevel: level, reasoning: summary?.reasoning || '' } as any;
     }
 
-    console.log('assistant analysis counts', { 
-      insights: insights.length, 
-      criteria: criteria.length, 
-      summary: !!summary, 
-      threadId,
-      runId 
-    });
-
     return new Response(
       JSON.stringify({ 
         insights, 
@@ -324,9 +265,8 @@ ${content}
     );
 
   } catch (error) {
-    console.error('analyze-assistant error', error);
     return new Response(
-      JSON.stringify({ error: error.message || 'Unexpected error' }),
+      JSON.stringify({ error: error.message || 'Analysis failed' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
