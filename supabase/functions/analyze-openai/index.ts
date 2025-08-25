@@ -205,7 +205,6 @@ Rules:
           { role: 'system', content: system },
           { role: 'user', content: user }
         ],
-        temperature: 0,
       }),
     });
 
@@ -243,7 +242,6 @@ Rules:
               { role: 'system', content: system },
               { role: 'user', content: user }
             ],
-            temperature: 0,
           }),
         });
         const data2 = await resp2.json();
