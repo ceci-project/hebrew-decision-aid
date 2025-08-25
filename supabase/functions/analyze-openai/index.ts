@@ -107,7 +107,7 @@ Rules:
 
     const user = `Content (UTF-8 Hebrew allowed):\n"""${content}"""`;
 
-    const model = 'gpt-4.1';
+    const model = 'gpt-4o';
     
     console.log('📤 Preparing OpenAI API call:', {
       model,
