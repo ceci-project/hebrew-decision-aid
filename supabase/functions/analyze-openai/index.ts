@@ -193,7 +193,7 @@ Rules:
                       rangeStart: { type: 'number' },
                       rangeEnd: { type: 'number' }
                     },
-                    required: ['criterionId','quote','explanation','suggestion','rangeStart','rangeEnd']
+                    required: ['id','criterionId','quote','explanation','suggestion','rangeStart','rangeEnd']
                   }
                 }
               },
