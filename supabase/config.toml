@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.analyze-openai]
 verify_jwt = false
 
+[functions.analyze-assistant]
+verify_jwt = false
+
 [functions.test-secrets]
 verify_jwt = false
 
