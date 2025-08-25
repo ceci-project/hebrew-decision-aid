@@ -62,20 +62,14 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
       console.log('test-simple failed:', e);
     }
     
-    // Try analyze-assistant first if available, fallback to analyze-openai
+    // Use analyze-openai for analysis
     try {
-      console.log('Trying analyze-assistant...');
-      apiData = await tryInvoke('analyze-assistant');
-      console.log('analyze-assistant succeeded:', apiData);
+      console.log('Trying analyze-openai...');
+      apiData = await tryInvoke('analyze-openai');
+      console.log('analyze-openai succeeded:', apiData);
     } catch (e) {
-      console.log('analyze-assistant failed, trying analyze-openai...', e);
-      try {
-        apiData = await tryInvoke('analyze-openai');
-        console.log('analyze-openai succeeded:', apiData);
-      } catch (e2) {
-        console.log('analyze-openai also failed:', e2);
-        throw e2;
-      }
+      console.log('analyze-openai failed:', e);
+      throw e;
     }
 
     const raw: any[] = Array.isArray(apiData?.insights) ? apiData.insights : [];
