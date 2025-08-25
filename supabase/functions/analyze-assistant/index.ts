@@ -2,12 +2,29 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-console.log('Loading secrets...');
+console.log('Loading secrets... Version 3.0 - Force Update');
+
+// Debug ALL environment variables first
+console.log('All environment variables:', Object.keys(Deno.env.toObject()));
+console.log('OpenAI-related variables:', Object.keys(Deno.env.toObject()).filter(k => k.toLowerCase().includes('openai')));
+console.log('Assistant-related variables:', Object.keys(Deno.env.toObject()).filter(k => k.toLowerCase().includes('assistant')));
 
 // Try all possible secret names and log what we find
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY_SECRET') || Deno.env.get('openai_api_key');
 const assistantId = Deno.env.get('ASSISTANT_ID') || Deno.env.get('ASSISTANT_ID_SECRET') || Deno.env.get('assistant_id');
 const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID') || Deno.env.get('OPENAI_PROJECT_ID_SECRET') || Deno.env.get('openai_project_id');
+
+// Detailed logging of each secret attempt
+console.log('Secret resolution attempts:', {
+  OPENAI_API_KEY: Deno.env.get('OPENAI_API_KEY') ? 'FOUND' : 'NOT_FOUND',
+  OPENAI_API_KEY_SECRET: Deno.env.get('OPENAI_API_KEY_SECRET') ? 'FOUND' : 'NOT_FOUND', 
+  openai_api_key: Deno.env.get('openai_api_key') ? 'FOUND' : 'NOT_FOUND',
+  ASSISTANT_ID: Deno.env.get('ASSISTANT_ID') ? 'FOUND' : 'NOT_FOUND',
+  ASSISTANT_ID_SECRET: Deno.env.get('ASSISTANT_ID_SECRET') ? 'FOUND' : 'NOT_FOUND',
+  assistant_id: Deno.env.get('assistant_id') ? 'FOUND' : 'NOT_FOUND',
+  finalOpenAIKey: openAIApiKey ? 'RESOLVED' : 'MISSING',
+  finalAssistantId: assistantId ? 'RESOLVED' : 'MISSING'
+});
 
 console.log('Secrets loaded at startup:', {
   openaiKey: openAIApiKey ? `${openAIApiKey.substring(0, 8)}...` : 'MISSING',
