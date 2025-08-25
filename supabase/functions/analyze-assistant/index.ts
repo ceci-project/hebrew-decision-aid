@@ -3,6 +3,16 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 console.log('Loading secrets for analyze-assistant...');
 
+// Get all environment variables to debug
+const allEnv = Deno.env.toObject();
+console.log('All environment keys:', Object.keys(allEnv));
+console.log('ASSISTANT_ID debug:', {
+  ASSISTANT_ID: Deno.env.get('ASSISTANT_ID'),
+  ASSISTANT_ID_length: Deno.env.get('ASSISTANT_ID')?.length || 0,
+  direct_value: allEnv['ASSISTANT_ID'],
+  all_assistant_keys: Object.keys(allEnv).filter(key => key.toLowerCase().includes('assistant'))
+});
+
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY_SECRET') || Deno.env.get('openai_api_key');
 const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID') || Deno.env.get('OPENAI_PROJECT_ID_SECRET') || Deno.env.get('openai_project_id');
 const assistantId = Deno.env.get('ASSISTANT_ID') || Deno.env.get('ASSISTANT_ID_SECRET') || Deno.env.get('assistant_id');
@@ -11,6 +21,7 @@ console.log('Secrets loaded at startup:', {
   openaiKey: openAIApiKey ? `${openAIApiKey.substring(0, 8)}...` : 'MISSING',
   projectId: openAIProjectId ? `${openAIProjectId.substring(0, 8)}...` : 'MISSING',
   assistantId: assistantId ? `${assistantId.substring(0, 8)}...` : 'MISSING',
+  assistantIdLength: assistantId ? assistantId.length : 0,
   allEnvKeys: Object.keys(Deno.env.toObject()).filter(k => 
     k.toLowerCase().includes('openai') || k.toLowerCase().includes('assistant')
   )
