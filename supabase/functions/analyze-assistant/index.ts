@@ -13,7 +13,10 @@ console.log('Secrets loaded at startup:', {
   openaiKey: openAIApiKey ? `${openAIApiKey.substring(0, 8)}...` : 'MISSING',
   assistantId: assistantId ? `${assistantId.substring(0, 8)}...` : 'MISSING',
   projectId: openAIProjectId ? `${openAIProjectId.substring(0, 8)}...` : 'MISSING',
-  allEnvKeys: Object.keys(Deno.env.toObject()).filter(k => k.toLowerCase().includes('openai') || k.toLowerCase().includes('assistant'))
+  allEnvKeys: Object.keys(Deno.env.toObject()).filter(k => k.toLowerCase().includes('openai') || k.toLowerCase().includes('assistant')),
+  rawOpenAIKey: Deno.env.get('OPENAI_API_KEY'),
+  rawAssistantId: Deno.env.get('ASSISTANT_ID'),
+  allSecrets: Object.keys(Deno.env.toObject())
 });
 
 const corsHeaders = {
