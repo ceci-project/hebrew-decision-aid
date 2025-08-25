@@ -108,6 +108,17 @@ Rules:
     const user = `Content (UTF-8 Hebrew allowed):\n"""${content}"""`;
 
     const model = 'gpt-4.1';
+    
+    console.log('📤 Preparing OpenAI API call:', {
+      model,
+      contentLength: content.length,
+      maxInsights,
+      timestamp: new Date().toISOString(),
+      hasApiKey: !!openAIApiKey,
+      hasProjectId: !!openAIProjectId
+    });
+
+    const requestStartTime = Date.now();
     let resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -198,8 +209,23 @@ Rules:
       }),
     });
 
+    const requestDuration = Date.now() - requestStartTime;
+    console.log('📥 OpenAI API response received:', {
+      status: resp.status,
+      statusText: resp.statusText,
+      duration: `${requestDuration}ms`,
+      timestamp: new Date().toISOString()
+    });
+
     let data = await resp.json();
+    
     if (!resp.ok) {
+      console.error('❌ OpenAI API error response:', {
+        status: resp.status,
+        error: data?.error?.message || 'Unknown error',
+        type: data?.error?.type,
+        code: data?.error?.code
+      });
       const msg = String(data?.error?.message || '');
       const needsFallback = msg.toLowerCase().includes('response_format') || msg.toLowerCase().includes('json_schema');
       if (needsFallback) {
