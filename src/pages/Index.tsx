@@ -12,6 +12,7 @@ import { analyzeDocument } from "@/services/analysis";
 import { CRITERIA } from "@/data/criteria";
 import type { DecisionDocument, Insight } from "@/types/models";
 import type { AnalysisMeta } from "@/services/analysis";
+import FindingsPanel from "@/components/Editor/FindingsPanel";
 
 const Index = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -25,7 +26,7 @@ const Index = () => {
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
   const navigate = useNavigate();
 
-  const UI_VERSION = "App v2025-08-26-UI-3-Homepage";
+  const UI_VERSION = "App v2025-08-26-UI-4-Homepage";
 
   const handlePick = () => inputRef.current?.click();
 
@@ -40,18 +41,26 @@ const Index = () => {
         createdAt: now,
         updatedAt: now,
       };
+      
+      console.log(`🚀 ${UI_VERSION} - Creating document with ID: ${doc.id}`);
       storage.saveDocument(doc);
       
       // Save insights if any exist
       if (insights.length > 0) {
         storage.saveInsights(doc.id, insights);
+        console.log(`💾 ${UI_VERSION} - Saved ${insights.length} insights for document ${doc.id}`);
       }
       
-      toast({ title: "מסמך נוצר בהצלחה", description: "המסמך נשמר במערכת" });
+      toast({ title: "מסמך נוצר בהצלחה", description: "עובר לעמוד העורך..." });
       
-      // Navigate to editor page
-      navigate(`/editor/${doc.id}`);
+      // Navigate to editor page with slight delay to ensure save completes
+      setTimeout(() => {
+        console.log(`🧭 ${UI_VERSION} - Navigating to /editor/${doc.id}`);
+        navigate(`/editor/${doc.id}`);
+      }, 100);
+      
     } catch (e) {
+      console.error(`❌ ${UI_VERSION} - Error creating document:`, e);
       toast({ title: "שגיאה ביצירת מסמך", description: String(e) });
     } finally {
       setBusy(false);
@@ -128,8 +137,6 @@ const Index = () => {
     }
   };
 
-  const short = (s?: string | null) => (s ? `${s.slice(0,6)}…${s.slice(-4)}` : "");
-
   return (
     <div dir="rtl" className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -157,7 +164,7 @@ const Index = () => {
               variant="default" 
               size="sm"
             >
-              שמור והעבר לעורך
+              {busy ? "שומר..." : "שמור ועבור לעורך"}
             </Button>
           </div>
         </div>
@@ -225,119 +232,136 @@ const Index = () => {
         </div>
 
         {/* Right Sidebar */}
-        <div className="w-80 bg-gray-50 border-l border-gray-200 p-6">
-          <div className="space-y-6">
-            {/* Version Info */}
-            <div className="bg-blue-50 p-3 rounded border text-xs">
-              <div className="font-semibold mb-2">🔧 Version Info:</div>
-              <div>UI: {UI_VERSION}</div>
-              <div>Backend: {meta?.version || 'unknown'}</div>
-              <div>Source: {meta?.source || 'N/A'}</div>
-            </div>
+        <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto max-h-screen">
+          <div className="p-6">
+            <div className="space-y-6">
+              {/* Version Info */}
+              <div className="bg-blue-50 p-3 rounded border text-xs">
+                <div className="font-semibold mb-2">🔧 Version Info:</div>
+                <div>UI: {UI_VERSION}</div>
+                <div>Backend: {meta?.version || 'unknown'}</div>
+                <div>Source: {meta?.source || 'N/A'}</div>
+              </div>
 
-            {/* Enhanced Debug Panel */}
-            <div className="bg-gray-50 p-3 rounded border text-xs">
-              <div className="font-semibold mb-2">🐛 Debug Info:</div>
-              <div>Insights: {insights.length}</div>
-              <div>Criteria: {criteria.length}</div>
-              <div>Summary: {summary ? '✓' : '✗'}</div>
-              <div>Meta source: {meta?.source || 'N/A'}</div>
-              <div>Meta version: {meta?.version || 'N/A'}</div>
-              {insights[0] && (
-                <div className="mt-2 p-2 bg-white rounded border">
-                  <div className="font-medium">Sample Insight:</div>
-                  <div>ID: {insights[0].id}</div>
-                  <div>suggestion: {insights[0].suggestion ? `✓ (${insights[0].suggestion.length} chars)` : '✗'}</div>
-                  <div>suggestion_primary: {insights[0].suggestion_primary ? `✓ (${insights[0].suggestion_primary.length} chars)` : '✗'}</div>
-                  <div>suggestion_secondary: {insights[0].suggestion_secondary ? `✓ (${insights[0].suggestion_secondary.length} chars)` : '✗'}</div>
-                  {insights[0].suggestion_primary && (
-                    <div className="mt-1 text-xs text-gray-600 max-h-16 overflow-y-auto">
-                      <strong>Primary:</strong> {insights[0].suggestion_primary.substring(0, 100)}...
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Quick Summary */}
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">סיכום מהיר</h3>
-              
-              {criteria.length > 0 ? (
-                <div className="space-y-3">
-                  {CRITERIA.map((criterion) => {
-                    const criterionData = criteria.find(c => c.id === criterion.id);
-                    const score = criterionData?.score ?? 0;
-                    const insightCount = insights.filter(ins => ins.criterionId === criterion.id).length;
-                    
-                    return (
-                      <div key={criterion.id} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: `var(${criterion.colorVar})` }}
-                          />
-                          <span className="text-sm text-gray-700">{criterion.name}:</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-medium text-gray-900">{insightCount}</span>
-                          {score > 0 && (
-                            <span className="text-xs text-gray-500">({score}/10)</span>
-                          )}
-                        </div>
+              {/* Enhanced Debug Panel */}
+              <div className="bg-gray-50 p-3 rounded border text-xs">
+                <div className="font-semibold mb-2">🐛 Debug Info:</div>
+                <div>Insights: {insights.length}</div>
+                <div>Criteria: {criteria.length}</div>
+                <div>Summary: {summary ? '✓' : '✗'}</div>
+                <div>Meta source: {meta?.source || 'N/A'}</div>
+                <div>Meta version: {meta?.version || 'N/A'}</div>
+                {insights[0] && (
+                  <div className="mt-2 p-2 bg-white rounded border">
+                    <div className="font-medium">Sample Insight:</div>
+                    <div>ID: {insights[0].id}</div>
+                    <div>suggestion: {insights[0].suggestion ? `✓ (${insights[0].suggestion.length} chars)` : '✗'}</div>
+                    <div>suggestion_primary: {insights[0].suggestion_primary ? `✓ (${insights[0].suggestion_primary.length} chars)` : '✗'}</div>
+                    <div>suggestion_secondary: {insights[0].suggestion_secondary ? `✓ (${insights[0].suggestion_secondary.length} chars)` : '✗'}</div>
+                    {insights[0].suggestion_primary && (
+                      <div className="mt-1 text-xs text-gray-600 max-h-16 overflow-y-auto">
+                        <strong>Primary:</strong> {insights[0].suggestion_primary.substring(0, 100)}...
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">אין נתונים להצגה - הריצו ניתוח</p>
-              )}
-            </div>
-
-            {/* Feasibility Score */}
-            {summary && (
-              <div className="border-t border-gray-200 pt-6">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">ציון כללי:</h4>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-gray-900 mb-1">
-                    {summary.feasibilityPercent}%
+                    )}
                   </div>
-                  <div className="text-sm text-gray-500 mb-3">
-                    {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : 
-                     summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 
-                     'ישימות גבוהה'}
-                  </div>
-                  <Progress value={summary.feasibilityPercent} className="h-2" />
-                </div>
-                
-                {summary.reasoning && (
-                  <p className="mt-4 text-xs text-gray-600 leading-relaxed">
-                    {summary.reasoning}
-                  </p>
                 )}
               </div>
-            )}
 
-            {/* Analysis Meta */}
-            {meta && (
-              <div className="border-t border-gray-200 pt-4">
-                <div className="text-xs text-gray-500">
-                  {meta.source === 'assistants' ? (
-                    <span>
-                      מופעל ע״י OpenAI Assistant
-                      {meta.model ? ` • ${meta.model}` : ''}
-                    </span>
-                  ) : meta.source === 'openai' ? (
-                    <span>
-                      מופעל ע״י OpenAI
-                      {meta.model ? ` • ${meta.model}` : ''}
-                    </span>
-                  ) : (
-                    <span>מופעל ע״י ניתוח מקומי</span>
+              {/* Feasibility Score */}
+              {summary && (
+                <div className="border-t border-gray-200 pt-6">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">ציון כללי:</h4>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-gray-900 mb-1">
+                      {summary.feasibilityPercent}%
+                    </div>
+                    <div className="text-sm text-gray-500 mb-3">
+                      {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : 
+                       summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 
+                       'ישימות גבוהה'}
+                    </div>
+                    <Progress value={summary.feasibilityPercent} className="h-2" />
+                  </div>
+                  
+                  {summary.reasoning && (
+                    <p className="mt-4 text-xs text-gray-600 leading-relaxed">
+                      {summary.reasoning}
+                    </p>
                   )}
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Enhanced Findings Display */}
+              {(insights.length > 0 || criteria.length > 0) && (
+                <div className="border-t border-gray-200 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">תוצאות הניתוח</h3>
+                    {insights.length > 0 && (
+                      <span className="text-sm text-gray-500">{insights.length} ממצאים</span>
+                    )}
+                  </div>
+                  
+                  <FindingsPanel 
+                    insights={insights} 
+                    criteriaData={criteria}
+                  />
+                </div>
+              )}
+
+              {/* Quick Summary for when no detailed analysis */}
+              {insights.length === 0 && criteria.length > 0 && (
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">סיכום מהיר</h3>
+                  
+                  <div className="space-y-3">
+                    {CRITERIA.map((criterion) => {
+                      const criterionData = criteria.find(c => c.id === criterion.id);
+                      const score = criterionData?.score ?? 0;
+                      const insightCount = insights.filter(ins => ins.criterionId === criterion.id).length;
+                      
+                      return (
+                        <div key={criterion.id} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: `var(${criterion.colorVar})` }}
+                            />
+                            <span className="text-sm text-gray-700">{criterion.name}:</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-medium text-gray-900">{insightCount}</span>
+                            {score > 0 && (
+                              <span className="text-xs text-gray-500">({score}/10)</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Analysis Meta */}
+              {meta && (
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="text-xs text-gray-500">
+                    {meta.source === 'assistants' ? (
+                      <span>
+                        מופעל ע״י OpenAI Assistant
+                        {meta.model ? ` • ${meta.model}` : ''}
+                      </span>
+                    ) : meta.source === 'openai' ? (
+                      <span>
+                        מופעל ע״י OpenAI
+                        {meta.model ? ` • ${meta.model}` : ''}
+                      </span>
+                    ) : (
+                      <span>מופעל ע״י ניתוח מקומי</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

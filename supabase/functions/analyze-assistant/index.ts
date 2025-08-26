@@ -1,8 +1,7 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const VERSION = "AssistantPath v2025-08-26-B";
+const VERSION = "AssistantPath v2025-08-26-C";
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
 const assistantId = Deno.env.get('ASSISTANT_ID');
@@ -70,15 +69,27 @@ serve(async (req) => {
 
     try {
       console.log(`🔄 ${VERSION} - Step 1: Creating thread`);
+      
+      // Prepare headers - only include OpenAI-Organization if we have a project ID
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'assistants=v2',
+      };
+      
+      // Only add OpenAI-Organization header if we have a project ID
+      // This fixes the "OpenAI-Organization header should match organization for API key" error
+      if (openAIProjectId && openAIProjectId.trim()) {
+        headers['OpenAI-Organization'] = openAIProjectId;
+        console.log(`🔧 ${VERSION} - Using OpenAI-Organization header: ${openAIProjectId}`);
+      } else {
+        console.log(`⚠️ ${VERSION} - No OpenAI Project ID provided, skipping OpenAI-Organization header`);
+      }
+
       // Step 1: Create a thread
       const threadResponse = await fetch('https://api.openai.com/v1/threads', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-          'OpenAI-Beta': 'assistants=v2',
-          ...(openAIProjectId ? { 'OpenAI-Organization': openAIProjectId } : {}),
-        },
+        headers,
         body: JSON.stringify({}),
         signal: controller.signal,
       });
@@ -97,12 +108,7 @@ serve(async (req) => {
       console.log(`🔄 ${VERSION} - Step 2: Adding message to thread`);
       const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-          'OpenAI-Beta': 'assistants=v2',
-          ...(openAIProjectId ? { 'OpenAI-Organization': openAIProjectId } : {}),
-        },
+        headers,
         body: JSON.stringify({
           role: 'user',
           content: `נתח את המסמך הממשלתי הבא ותן ביקורת על פי רובריקת 12 הקריטריונים. 
@@ -142,12 +148,7 @@ ${truncatedContent}
       console.log(`🔄 ${VERSION} - Step 3: Running assistant ${assistantId}`);
       const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-          'OpenAI-Beta': 'assistants=v2',
-          ...(openAIProjectId ? { 'OpenAI-Organization': openAIProjectId } : {}),
-        },
+        headers,
         body: JSON.stringify({
           assistant_id: assistantId,
           response_format: { type: "json_object" }
@@ -178,11 +179,7 @@ ${truncatedContent}
 
         try {
           const statusResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
-            headers: {
-              'Authorization': `Bearer ${openAIApiKey}`,
-              'OpenAI-Beta': 'assistants=v2',
-              ...(openAIProjectId ? { 'OpenAI-Organization': openAIProjectId } : {}),
-            },
+            headers,
             signal: controller.signal,
           });
 
@@ -212,11 +209,7 @@ ${truncatedContent}
       // Step 5: Get the messages
       console.log(`🔄 ${VERSION} - Step 5: Retrieving messages`);
       const messagesResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'OpenAI-Beta': 'assistants=v2',
-          ...(openAIProjectId ? { 'OpenAI-Organization': openAIProjectId } : {}),
-        },
+        headers,
         signal: controller.signal,
       });
 

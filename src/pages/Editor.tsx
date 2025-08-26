@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { storage } from "@/services/storage";
@@ -20,12 +21,8 @@ import FindingsAccordion from "@/components/Editor/FindingsAccordion";
 const EditorPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [doc, setDoc] = useState<DecisionDocument | undefined>(() =>
-    id ? storage.getDocument(id) : undefined
-  );
-  const [insights, setInsights] = useState<Insight[]>(() =>
-    id ? storage.getInsights(id) : []
-  );
+  const [doc, setDoc] = useState<DecisionDocument | undefined>(undefined);
+  const [insights, setInsights] = useState<Insight[]>([]);
   const [tab, setTab] = useState("canvas");
   const [loading, setLoading] = useState(false);
   const [meta, setMeta] = useState<AnalysisMeta | undefined>(undefined);
@@ -33,14 +30,43 @@ const EditorPage = () => {
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  const UI_VERSION = "App v2025-08-26-UI-2";
+  const UI_VERSION = "App v2025-08-26-UI-5-Editor";
 
+  // Load document on component mount
   useEffect(() => {
-    if (!doc) {
+    console.log(`🚀 ${UI_VERSION} - Editor page loaded with ID: ${id}`);
+    
+    if (!id) {
+      console.error(`❌ ${UI_VERSION} - No document ID provided`);
       toast({ title: "מסמך לא נמצא", description: "חזרה למסך הבית" });
       navigate("/");
+      return;
     }
-  }, [doc, navigate]);
+
+    // Load document from storage
+    const loadedDoc = storage.getDocument(id);
+    console.log(`📄 ${UI_VERSION} - Loaded document:`, loadedDoc ? {
+      id: loadedDoc.id,
+      title: loadedDoc.title,
+      contentLength: loadedDoc.content.length,
+      createdAt: loadedDoc.createdAt
+    } : 'Document not found');
+
+    if (!loadedDoc) {
+      console.error(`❌ ${UI_VERSION} - Document not found in storage for ID: ${id}`);
+      toast({ title: "מסמך לא נמצא", description: "חזרה למסך הבית" });
+      navigate("/");
+      return;
+    }
+
+    setDoc(loadedDoc);
+
+    // Load insights from storage
+    const loadedInsights = storage.getInsights(id);
+    console.log(`🔍 ${UI_VERSION} - Loaded insights:`, loadedInsights.length);
+    setInsights(loadedInsights);
+
+  }, [id, navigate]);
 
   const onReanalyze = async () => {
     if (!doc) return;
@@ -168,7 +194,17 @@ const EditorPage = () => {
     });
   };
 
-  if (!doc) return null;
+  // Show loading state while document is being loaded
+  if (!doc) {
+    return (
+      <div dir="rtl" className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg font-medium text-gray-900 mb-2">טוען מסמך...</div>
+          <div className="text-sm text-gray-500">ID: {id}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div dir="rtl" className="min-h-screen bg-gray-50">
@@ -219,30 +255,51 @@ const EditorPage = () => {
               מספר תווים: {doc.content.length.toLocaleString()}
             </div>
 
-            {/* Main Text Editor */}
-            <div className="bg-white rounded-lg border-2 border-blue-300 p-6">
-              <Input
-                value={doc.title}
-                onChange={(e) => {
-                  const updated = { ...doc, title: e.target.value, updatedAt: new Date().toISOString() };
-                  setDoc(updated);
-                  storage.saveDocument(updated);
-                }}
-                placeholder="כותרת ההחלטה"
-                className="mb-4 text-lg font-medium border-0 border-b border-gray-200 rounded-none px-0 focus:ring-0 focus:border-blue-500"
-              />
-              
-              <Textarea
-                className="min-h-[60vh] border-0 resize-none focus:ring-0 text-base leading-relaxed"
-                value={doc.content}
-                onChange={(e) => {
-                  const updated = { ...doc, content: e.target.value, updatedAt: new Date().toISOString() };
-                  setDoc(updated);
-                  storage.saveDocument(updated);
-                }}
-                placeholder="כתבו או הדביקו את טקסט ההחלטה כאן..."
-              />
-            </div>
+            {/* Tabs for Canvas and Text Editor */}
+            <Tabs value={tab} onValueChange={setTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="canvas">תצוגת הדגשות</TabsTrigger>
+                <TabsTrigger value="editor">עריכת טקסט</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="canvas" className="mt-4">
+                <div className="bg-white rounded-lg border-2 border-blue-300 p-6">
+                  <div ref={canvasRef} id="canvas-scroll" className="max-h-[70vh] overflow-y-auto">
+                    <HighlightCanvas
+                      content={doc.content}
+                      insights={insights}
+                      criteria={CRITERIA_MAP}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="editor" className="mt-4">
+                <div className="bg-white rounded-lg border-2 border-blue-300 p-6">
+                  <Input
+                    value={doc.title}
+                    onChange={(e) => {
+                      const updated = { ...doc, title: e.target.value, updatedAt: new Date().toISOString() };
+                      setDoc(updated);
+                      storage.saveDocument(updated);
+                    }}
+                    placeholder="כותרת ההחלטה"
+                    className="mb-4 text-lg font-medium border-0 border-b border-gray-200 rounded-none px-0 focus:ring-0 focus:border-blue-500"
+                  />
+                  
+                  <Textarea
+                    className="min-h-[60vh] border-0 resize-none focus:ring-0 text-base leading-relaxed"
+                    value={doc.content}
+                    onChange={(e) => {
+                      const updated = { ...doc, content: e.target.value, updatedAt: new Date().toISOString() };
+                      setDoc(updated);
+                      storage.saveDocument(updated);
+                    }}
+                    placeholder="כתבו או הדביקו את טקסט ההחלטה כאן..."
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
 
