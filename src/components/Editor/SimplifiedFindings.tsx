@@ -2,7 +2,7 @@
 import React from "react";
 import { Insight } from "@/types/models";
 import { CRITERIA } from "@/data/criteria";
-import CriterionDisplay from "./CriterionDisplay";
+import CriterionDisplayFixed from "./CriterionDisplayFixed";
 
 interface Props {
   insights: Insight[];
@@ -57,7 +57,7 @@ const SimplifiedFindings: React.FC<Props> = ({ insights, onJumpToText }) => {
         return (
           <div key={criterion.id}>
             {criterionInsights.map((insight, index) => (
-              <CriterionDisplay
+              <CriterionDisplayFixed
                 key={`${criterion.id}-${index}`}
                 insight={insight}
                 onJumpToText={onJumpToText}
