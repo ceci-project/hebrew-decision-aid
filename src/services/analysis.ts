@@ -16,11 +16,13 @@ function pickMatches(content: string, term: string): number[] {
   }
   return idxs;
 }
+
 export interface AnalysisMeta {
   source: 'assistants' | 'openai' | 'local';
   assistantId?: string;
   runId?: string;
   model?: string | null;
+  version?: string;
 }
 
 export interface AnalysisResult {
