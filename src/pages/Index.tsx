@@ -99,17 +99,34 @@ const Index = () => {
   };
 
   const onFile = async (file?: File) => {
-    if (!file) return;
+    console.log('📁 onFile called:', { hasFile: !!file, fileName: file?.name, fileSize: file?.size });
+    if (!file) {
+      console.log('❌ No file provided to onFile');
+      return;
+    }
+    
+    console.log('🚀 Starting file processing...');
     setBusy(true);
     try {
+      console.log('📖 Extracting text from file...');
       const { title: extractedTitle, content: extractedContent } = await extractTextFromFile(file);
+      console.log('✅ Text extracted:', { 
+        titleLength: extractedTitle?.length || 0, 
+        contentLength: extractedContent?.length || 0,
+        title: extractedTitle?.substring(0, 50) + '...',
+        contentPreview: extractedContent?.substring(0, 100) + '...'
+      });
+      
       setTitle(extractedTitle || "החלטת ממשלה חדשה");
       setContent(extractedContent);
       setIsCleared(false); // Reset cleared state when file is loaded
+      console.log('📝 State updated with new content');
       toast({ title: "הקובץ נטען בהצלחה", description: "אפשר לערוך ולנתח עכשיו" });
     } catch (e) {
+      console.error('❌ Error processing file:', e);
       toast({ title: "שגיאה בטעינת קובץ", description: String(e) });
     } finally {
+      console.log('🏁 File processing completed, setting busy to false');
       setBusy(false);
     }
   };
