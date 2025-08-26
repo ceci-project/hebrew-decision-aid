@@ -3,7 +3,6 @@ import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { extractTextFromFile } from "@/utils/fileReaders";
@@ -12,7 +11,9 @@ import { analyzeDocument } from "@/services/analysis";
 import { CRITERIA } from "@/data/criteria";
 import type { DecisionDocument, Insight } from "@/types/models";
 import type { AnalysisMeta } from "@/services/analysis";
-import FindingsPanel from "@/components/Editor/FindingsPanel";
+import CriterionAccordion from "@/components/Editor/CriterionAccordion";
+import DecisionEditor from "@/components/Editor/DecisionEditor";
+import InsightDetailPanel from "@/components/Editor/InsightDetailPanel";
 
 const Index = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -24,6 +25,8 @@ const Index = () => {
   const [meta, setMeta] = useState<AnalysisMeta | undefined>(undefined);
   const [criteria, setCriteria] = useState<Array<{ id: string; name: string; weight: number; score: number; justification: string }>>([]);
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
+  const [selectedInsight, setSelectedInsight] = useState<Insight | null>(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const navigate = useNavigate();
 
   const UI_VERSION = "App v2025-08-26-UI-4-Homepage";
@@ -128,6 +131,7 @@ const Index = () => {
       setMeta(result?.meta);
       setCriteria(Array.isArray(result?.criteria) ? result.criteria : []);
       setSummary(result?.summary ?? null);
+      setShowAnalysis(true);
       toast({ title: "הניתוח הושלם", description: "תוצאות הניתוח מוצגות בצד" });
     } catch (e) {
       console.error(`❌ ${UI_VERSION} - Analysis failed:`, e);
@@ -135,6 +139,25 @@ const Index = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleInsightClick = (insight: Insight) => {
+    setSelectedInsight(insight);
+  };
+
+  const handleContentChange = (newContent: string) => {
+    setContent(newContent);
+  };
+
+  const handleApplySuggestion = (suggestion: string) => {
+    if (!selectedInsight) return;
+    
+    const beforeText = content.substring(0, selectedInsight.rangeStart);
+    const afterText = content.substring(selectedInsight.rangeEnd);
+    const newContent = beforeText + suggestion + afterText;
+    
+    setContent(newContent);
+    toast({ title: "הצעה יושמה", description: "הטקסט עודכן בהצלחה" });
   };
 
   return (
@@ -203,12 +226,22 @@ const Index = () => {
                 className="mb-4 text-lg font-medium border-0 border-b border-gray-200 rounded-none px-0 focus:ring-0 focus:border-blue-500"
               />
               
-              <Textarea
-                className="min-h-[60vh] border-0 resize-none focus:ring-0 text-base leading-relaxed"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="כתבו או הדביקו את טקסט ההחלטה כאן..."
-              />
+              {showAnalysis ? (
+                <DecisionEditor
+                  content={content}
+                  insights={insights}
+                  onChange={handleContentChange}
+                  onInsightClick={handleInsightClick}
+                  className="min-h-[60vh]"
+                />
+              ) : (
+                <textarea
+                  className="w-full min-h-[60vh] border-0 resize-none focus:ring-0 text-base leading-relaxed outline-none"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="כתבו או הדביקו את טקסט ההחלטה כאן..."
+                />
+              )}
               
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <Button 
@@ -291,27 +324,28 @@ const Index = () => {
                 </div>
               )}
 
-              {/* Enhanced Findings Display */}
-              {(insights.length > 0 || criteria.length > 0) && (
+              {/* Analysis Results */}
+              {showAnalysis && criteria.length > 0 && (
                 <div className="border-t border-gray-200 pt-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">תוצאות הניתוח</h3>
+                    <h3 className="text-lg font-medium text-gray-900">ניתוח לפי קריטריונים</h3>
                     {insights.length > 0 && (
                       <span className="text-sm text-gray-500">{insights.length} ממצאים</span>
                     )}
                   </div>
                   
-                  <FindingsPanel 
+                  <CriterionAccordion 
+                    criteriaData={criteria} 
                     insights={insights} 
-                    criteriaData={criteria}
+                    onJump={handleInsightClick} 
                   />
                 </div>
               )}
 
               {/* Quick Summary for when no detailed analysis */}
-              {insights.length === 0 && criteria.length > 0 && (
+              {showAnalysis && insights.length === 0 && criteria.length > 0 && (
                 <div className="border-t border-gray-200 pt-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">סיכום מהיר</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">ניתוח לפי קריטריונים</h3>
                   
                   <div className="space-y-3">
                     {CRITERIA.map((criterion) => {
@@ -363,6 +397,17 @@ const Index = () => {
               )}
             </div>
           </div>
+
+          {/* Insight Detail Panel */}
+          {selectedInsight && (
+            <div className="border-t border-gray-200">
+              <InsightDetailPanel
+                insight={selectedInsight}
+                onApplySuggestion={handleApplySuggestion}
+                onClose={() => setSelectedInsight(null)}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
