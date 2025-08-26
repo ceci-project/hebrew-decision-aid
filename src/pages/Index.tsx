@@ -27,6 +27,7 @@ const Index = () => {
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
   const [selectedInsight, setSelectedInsight] = useState<Insight | null>(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [isCleared, setIsCleared] = useState(false);
   const navigate = useNavigate();
 
   const UI_VERSION = "App v2025-08-26-UI-4-Homepage";
@@ -34,8 +35,28 @@ const Index = () => {
   const handlePick = () => inputRef.current?.click();
 
   const createNewDocument = () => {
+    // Enhanced validation and error handling
+    if (!content.trim()) {
+      toast({ title: "אין תוכן למסמך", description: "אנא הזינו טקסט לפני השמירה" });
+      return;
+    }
+
+    console.log(`🚀 ${UI_VERSION} - Starting document creation...`);
+    console.log(`📊 ${UI_VERSION} - Current state:`, {
+      contentLength: content.length,
+      title: title,
+      insightsCount: insights.length,
+      busy: busy,
+      isCleared: isCleared
+    });
+
     setBusy(true);
     try {
+      // Check localStorage availability
+      if (typeof Storage === "undefined") {
+        throw new Error("LocalStorage לא זמין בדפדפן זה");
+      }
+
       const now = new Date().toISOString();
       const doc: DecisionDocument = {
         id: String(Date.now()),
@@ -56,6 +77,9 @@ const Index = () => {
       
       toast({ title: "מסמך נוצר בהצלחה", description: "עובר לעמוד העורך..." });
       
+      // Reset cleared state
+      setIsCleared(false);
+      
       // Navigate to editor page with slight delay to ensure save completes
       setTimeout(() => {
         console.log(`🧭 ${UI_VERSION} - Navigating to /editor/${doc.id}`);
@@ -64,7 +88,11 @@ const Index = () => {
       
     } catch (e) {
       console.error(`❌ ${UI_VERSION} - Error creating document:`, e);
-      toast({ title: "שגיאה ביצירת מסמך", description: String(e) });
+      toast({ 
+        title: "שגיאה ביצירת מסמך", 
+        description: `פרטי השגיאה: ${String(e)}`,
+        variant: "destructive"
+      });
     } finally {
       setBusy(false);
     }
@@ -77,6 +105,7 @@ const Index = () => {
       const { title: extractedTitle, content: extractedContent } = await extractTextFromFile(file);
       setTitle(extractedTitle || "החלטת ממשלה חדשה");
       setContent(extractedContent);
+      setIsCleared(false); // Reset cleared state when file is loaded
       toast({ title: "הקובץ נטען בהצלחה", description: "אפשר לערוך ולנתח עכשיו" });
     } catch (e) {
       toast({ title: "שגיאה בטעינת קובץ", description: String(e) });
@@ -185,6 +214,9 @@ const Index = () => {
 
   const handleContentChange = (newContent: string) => {
     setContent(newContent);
+    if (isCleared && newContent.trim()) {
+      setIsCleared(false); // Reset cleared state when content is added
+    }
   };
 
   const handleInsightsChange = (newInsights: Insight[]) => {
@@ -220,6 +252,7 @@ const Index = () => {
             </Button>
             <Button
               onClick={() => {
+                console.log(`🧹 ${UI_VERSION} - Clearing all content and state`);
                 setContent("");
                 setTitle("מסמך חדש");
                 setInsights([]);
@@ -228,7 +261,14 @@ const Index = () => {
                 setCriteria([]);
                 setSummary(null);
                 setMeta(undefined);
-                toast({ title: "הטקסט נוקה", description: "הקנבאס חזר למצב ריק" });
+                setIsCleared(true);
+                setBusy(false); // Ensure busy state is reset
+                setLoading(false); // Ensure loading state is reset
+                console.log(`✅ ${UI_VERSION} - All states cleared successfully`);
+                toast({ 
+                  title: "הטקסט נוקה", 
+                  description: "הקנבאס חזר למצב ריק - כעת תוכלו להזין תוכן חדש"
+                });
               }}
               disabled={busy}
               variant="outline"
@@ -246,6 +286,7 @@ const Index = () => {
               disabled={busy || !content.trim()} 
               variant="default" 
               size="sm"
+              title={!content.trim() ? "אנא הזינו תוכן למסמך לפני השמירה" : ""}
             >
               {busy ? "שומר..." : "שמור ועבור לעורך"}
             </Button>
@@ -263,11 +304,18 @@ const Index = () => {
                 <h2 className="text-xl font-medium text-gray-900">הזנת מסמך</h2>
               </div>
               
-              <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="text-sm text-blue-800">
-                  <strong>הוראות שימוש</strong>
+              <div className={`mb-4 p-4 rounded-lg border ${
+                isCleared 
+                  ? "bg-green-50 border-green-200" 
+                  : "bg-blue-50 border-blue-200"
+              }`}>
+                <div className={`text-sm ${isCleared ? "text-green-800" : "text-blue-800"}`}>
+                  <strong>{isCleared ? "מוכן למסמך חדש" : "הוראות שימוש"}</strong>
                   <br />
-                  כתבו או הדביקו את טקסט ההחלטה, או העלו קובץ DOCX. לאחר מכן לחצו על "נתח מסמך" לקבלת הערות ודירוג.
+                  {isCleared 
+                    ? "הקנבאס נוקה והמערכת מוכנה לקלט חדש. כתבו או הדביקו טקסט, או העלו קובץ DOCX."
+                    : "כתבו או הדביקו את טקסט ההחלטה, או העלו קובץ DOCX. לאחר מכן לחצו על \"נתח מסמך\" לקבלת הערות ודירוג."
+                  }
                 </div>
               </div>
             </div>
@@ -299,8 +347,16 @@ const Index = () => {
                 <textarea
                   className="w-full min-h-[60vh] border-0 resize-none focus:ring-0 text-base leading-relaxed outline-none"
                   value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="כתבו או הדביקו את טקסט ההחלטה כאן..."
+                  onChange={(e) => {
+                    setContent(e.target.value);
+                    if (isCleared && e.target.value.trim()) {
+                      setIsCleared(false);
+                    }
+                  }}
+                  placeholder={isCleared 
+                    ? "הקנבאס נוקה - כתבו או הדביקו טקסט חדש כאן..."
+                    : "כתבו או הדביקו את טקסט ההחלטה כאן..."
+                  }
                 />
               )}
               
@@ -340,9 +396,14 @@ const Index = () => {
               {/* Enhanced Debug Panel */}
               <div className="bg-gray-50 p-3 rounded border text-xs">
                 <div className="font-semibold mb-2">🐛 Debug Info:</div>
+                <div>Content Length: {content.length}</div>
                 <div>Insights: {insights.length}</div>
                 <div>Criteria: {criteria.length}</div>
                 <div>Summary: {summary ? '✓' : '✗'}</div>
+                <div>Busy: {busy ? '✓' : '✗'}</div>
+                <div>Loading: {loading ? '✓' : '✗'}</div>
+                <div>Cleared: {isCleared ? '✓' : '✗'}</div>
+                <div>Can Save: {!busy && content.trim() ? '✓' : '✗'}</div>
                 <div>Meta source: {meta?.source || 'N/A'}</div>
                 <div>Meta version: {meta?.version || 'N/A'}</div>
                 {insights[0] && (
