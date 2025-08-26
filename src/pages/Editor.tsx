@@ -49,10 +49,35 @@ const EditorPage = () => {
     }
     setLoading(true);
     try {
+      console.log('🚀 Starting analysis for document:', doc.title);
       const result: any = await analyzeDocument(doc.content);
+      console.log('📊 Analysis result received:', {
+        hasInsights: Array.isArray(result) || Array.isArray(result?.insights),
+        insightsCount: Array.isArray(result) ? result.length : (result?.insights?.length || 0),
+        hasCriteria: Array.isArray(result?.criteria),
+        criteriaCount: result?.criteria?.length || 0,
+        hasSummary: !!result?.summary,
+        meta: result?.meta,
+        sampleInsight: (Array.isArray(result) ? result[0] : result?.insights?.[0]) ? {
+          id: (Array.isArray(result) ? result[0] : result?.insights?.[0]).id,
+          suggestion: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion,
+          suggestion_primary: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion_primary,
+          suggestion_secondary: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion_secondary,
+        } : null
+      });
+      
       const ins: Insight[] = Array.isArray(result)
         ? (result as Insight[])
         : (result?.insights ?? []);
+      
+      console.log('🔍 Processed insights:', ins.map(i => ({
+        id: i.id,
+        criterionId: i.criterionId,
+        hasSuggestion: !!i.suggestion,
+        hasPrimary: !!i.suggestion_primary,
+        hasSecondary: !!i.suggestion_secondary
+      })));
+      
       setInsights(ins);
       setMeta(result?.meta);
       setCriteria(Array.isArray(result?.criteria) ? result.criteria : []);
@@ -60,6 +85,7 @@ const EditorPage = () => {
       storage.saveInsights(doc.id, ins);
       toast({ title: "הניתוח הושלם", description: "הודגשים והערות עודכנו" });
     } catch (e) {
+      console.error('❌ Analysis failed:', e);
       toast({ title: "שגיאה בניתוח", description: String(e) });
     } finally {
       setLoading(false);
@@ -230,6 +256,24 @@ const EditorPage = () => {
         <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto max-h-screen">
           <div className="p-6">
             <div className="space-y-6">
+              {/* Debug Panel */}
+              <div className="bg-gray-50 p-3 rounded border text-xs">
+                <div className="font-semibold mb-2">🐛 Debug Info:</div>
+                <div>Insights: {insights.length}</div>
+                <div>Criteria: {criteria.length}</div>
+                <div>Summary: {summary ? '✓' : '✗'}</div>
+                <div>Meta source: {meta?.source || 'N/A'}</div>
+                {insights[0] && (
+                  <div className="mt-2 p-2 bg-white rounded border">
+                    <div className="font-medium">Sample Insight:</div>
+                    <div>ID: {insights[0].id}</div>
+                    <div>suggestion: {insights[0].suggestion ? '✓' : '✗'}</div>
+                    <div>suggestion_primary: {insights[0].suggestion_primary ? '✓' : '✗'}</div>
+                    <div>suggestion_secondary: {insights[0].suggestion_secondary ? '✓' : '✗'}</div>
+                  </div>
+                )}
+              </div>
+
               {/* Feasibility Score */}
               {summary && (
                 <div>

@@ -24,6 +24,18 @@ interface Props {
 }
 
 const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump }) => {
+  console.log('🔍 CriterionAccordion received data:', {
+    criteriaDataCount: criteriaData?.length || 0,
+    insightsCount: insights?.length || 0,
+    sampleInsight: insights?.[0] ? {
+      id: insights[0].id,
+      suggestion: insights[0].suggestion,
+      suggestion_primary: insights[0].suggestion_primary,
+      suggestion_secondary: insights[0].suggestion_secondary,
+      hasNewFields: !!(insights[0].suggestion_primary || insights[0].suggestion_secondary)
+    } : null
+  });
+
   const byId: Record<string, CriterionScore> = Object.fromEntries(
     (criteriaData || []).map((c) => [c.id, c])
   );
@@ -54,8 +66,9 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      console.log('📋 Copied to clipboard:', text.substring(0, 50) + '...');
     } catch (error) {
-      // Silent fail
+      console.error('❌ Copy failed:', error);
     }
   };
 
@@ -73,6 +86,13 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
           const data = byId[c.id];
           const critInsights = insightsByCrit[c.id] || [];
           const mainInsight = critInsights[0]; // Take the first insight as the main one
+          
+          console.log(`🎯 Rendering criterion ${c.id}:`, {
+            hasMainInsight: !!mainInsight,
+            suggestion_primary: mainInsight?.suggestion_primary,
+            suggestion_secondary: mainInsight?.suggestion_secondary,
+            basicSuggestion: mainInsight?.suggestion
+          });
           
           return (
             <AccordionItem key={c.id} value={c.id} className="border rounded-lg px-3 py-1">
@@ -161,7 +181,11 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                             <Button 
                               size="sm" 
                               variant="ghost"
-                              onClick={() => copyToClipboard(mainInsight?.suggestion_primary || mainInsight?.suggestion || '')}
+                              onClick={() => {
+                                const textToCopy = mainInsight?.suggestion_primary || mainInsight?.suggestion || '';
+                                console.log('📋 Primary suggestion copy:', textToCopy);
+                                copyToClipboard(textToCopy);
+                              }}
                               className="h-6 w-6 p-0"
                             >
                               <Copy className="h-3 w-3" />
@@ -170,6 +194,11 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                           <p className="text-sm leading-relaxed">
                             {mainInsight?.suggestion_primary || mainInsight?.suggestion}
                           </p>
+                          {mainInsight?.suggestion_primary && (
+                            <div className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                              ✓ הצעה מפורטת זמינה
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -183,7 +212,10 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                             <Button 
                               size="sm" 
                               variant="ghost"
-                              onClick={() => copyToClipboard(mainInsight?.suggestion_secondary || '')}
+                              onClick={() => {
+                                console.log('📋 Secondary suggestion copy:', mainInsight?.suggestion_secondary);
+                                copyToClipboard(mainInsight?.suggestion_secondary || '');
+                              }}
                               className="h-6 w-6 p-0"
                             >
                               <Copy className="h-3 w-3" />
@@ -192,6 +224,9 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                           <p className="text-sm leading-relaxed">
                             {mainInsight.suggestion_secondary}
                           </p>
+                          <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                            ✓ הצעה חלופית זמינה
+                          </div>
                         </div>
                       )}
 
@@ -216,6 +251,18 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                               </li>
                             ))}
                           </ul>
+                        </div>
+                      )}
+                      
+                      {/* Debug info */}
+                      {(!mainInsight?.suggestion_primary && !mainInsight?.suggestion_secondary) && (
+                        <div className="bg-yellow-50 dark:bg-yellow-950/20 rounded-md p-2 border border-yellow-200 dark:border-yellow-800">
+                          <div className="text-xs text-yellow-700 dark:text-yellow-300">
+                            🐛 Debug: לא נמצאו הצעות מפורטות חדשות
+                            <br />suggestion: {mainInsight?.suggestion ? '✓' : '✗'}
+                            <br />suggestion_primary: {mainInsight?.suggestion_primary ? '✓' : '✗'}
+                            <br />suggestion_secondary: {mainInsight?.suggestion_secondary ? '✓' : '✗'}
+                          </div>
                         </div>
                       )}
                     </div>
