@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { storage } from "@/services/storage";
@@ -30,7 +29,7 @@ const EditorPage = () => {
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  const UI_VERSION = "App v2025-08-26-UI-5-Editor";
+  const UI_VERSION = "App v2025-08-26-UI-6-Editor";
 
   // Load document on component mount
   useEffect(() => {
@@ -268,7 +267,6 @@ const EditorPage = () => {
                     <HighlightCanvas
                       content={doc.content}
                       insights={insights}
-                      criteria={CRITERIA_MAP}
                     />
                   </div>
                 </div>
