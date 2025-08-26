@@ -298,15 +298,29 @@ const Index = () => {
                 היסטוריה
               </Button>
             </Link>
-            <Button 
-              onClick={createNewDocument} 
-              disabled={busy || !content.trim()} 
-              variant="default" 
-              size="sm"
-              title={!content.trim() ? "אנא הזינו תוכן למסמך לפני השמירה" : ""}
-            >
-              {busy ? "שומר..." : "שמור ועבור לעורך"}
-            </Button>
+            {isCleared ? (
+              <Button 
+                onClick={() => {
+                  console.log('📁 Cleared state - opening file upload');
+                  document.getElementById('file-upload')?.click();
+                }}
+                disabled={busy}
+                variant="default" 
+                size="sm"
+              >
+                העלה מסמך חדש
+              </Button>
+            ) : (
+              <Button 
+                onClick={createNewDocument} 
+                disabled={busy || !content.trim()} 
+                variant="default" 
+                size="sm"
+                title={!content.trim() ? "אנא הזינו תוכן למסמך לפני השמירה" : ""}
+              >
+                {busy ? "שומר..." : "שמור ועבור לעורך"}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -390,6 +404,7 @@ const Index = () => {
 
             <input
               ref={inputRef}
+              id="file-upload"
               type="file"
               accept=".docx,.pdf"
               className="hidden"

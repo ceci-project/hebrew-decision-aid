@@ -353,10 +353,13 @@ const EditorPage = () => {
                     insights={insights.filter(i => !i.isStale)} 
                     onJump={(insight) => {
                       setSelectedInsight(insight);
-                      // Scroll to insight in text
-                      window.dispatchEvent(new CustomEvent('jumpToInsight', { 
-                        detail: { insight } 
-                      }));
+                       // Scroll to insight in text - use the correct event name
+                       const editorRef = document.querySelector('[contenteditable="true"]') as HTMLElement;
+                       if (editorRef) {
+                         editorRef.dispatchEvent(new CustomEvent('selectInsight', { 
+                           detail: { insight } 
+                         }));
+                       }
                     }} 
                   />
                 </div>
