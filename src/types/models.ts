@@ -25,6 +25,12 @@ export interface Insight {
   suggestion_secondary?: string; // הצעה משנית
   rangeStart: number;
   rangeEnd: number;
+  // Enhanced anchoring fields for stable positioning
+  prefix?: string; // Text before the quote for re-anchoring
+  suffix?: string; // Text after the quote for re-anchoring
+  isStale?: boolean; // Whether the highlight is outdated
+  createdAt?: string;
+  source?: string; // 'analyze-assistant' | 'analyze-openai'
   // Optional extended fields for EditorAI findings
   anchor?: string;
   severity?: 'minor' | 'moderate' | 'critical';

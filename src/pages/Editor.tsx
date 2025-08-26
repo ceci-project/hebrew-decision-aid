@@ -4,32 +4,29 @@ import { storage } from "@/services/storage";
 import { analyzeDocument } from "@/services/analysis";
 import { CRITERIA, CRITERIA_MAP } from "@/data/criteria";
 import { DecisionDocument, Insight } from "@/types/models";
-import HighlightCanvas from "@/components/Editor/HighlightCanvas";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
-
+import { AnchorManager } from "@/services/anchorManager";
+import DecisionEditor from "@/components/Editor/DecisionEditor";
+import InsightDetailPanel from "@/components/Editor/InsightDetailPanel";
+import CriterionAccordion from "@/components/Editor/CriterionAccordion";
 import { Document, Packer, Paragraph } from "docx";
 import type { AnalysisMeta } from "@/services/analysis";
-import CriterionAccordion from "@/components/Editor/CriterionAccordion";
-import FindingsAccordion from "@/components/Editor/FindingsAccordion";
 
 const EditorPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [doc, setDoc] = useState<DecisionDocument | undefined>(undefined);
   const [insights, setInsights] = useState<Insight[]>([]);
-  const [tab, setTab] = useState("canvas");
+  const [selectedInsight, setSelectedInsight] = useState<Insight | null>(null);
   const [loading, setLoading] = useState(false);
   const [meta, setMeta] = useState<AnalysisMeta | undefined>(undefined);
   const [criteria, setCriteria] = useState<Array<{ id: string; name: string; weight: number; score: number; justification: string }>>([]);
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
 
-  const UI_VERSION = "App v2025-08-26-UI-6-Editor";
+  const UI_VERSION = "App v2025-08-26-UI-7-OverlayEditor";
 
   // Load document on component mount
   useEffect(() => {
@@ -60,10 +57,14 @@ const EditorPage = () => {
 
     setDoc(loadedDoc);
 
-    // Load insights from storage
+    // Load and enhance insights from storage
     const loadedInsights = storage.getInsights(id);
-    console.log(`🔍 ${UI_VERSION} - Loaded insights:`, loadedInsights.length);
-    setInsights(loadedInsights);
+    const enhancedInsights = loadedInsights.map(insight => 
+      AnchorManager.enhanceInsightWithAnchors(insight, loadedDoc.content)
+    );
+    
+    console.log(`🔍 ${UI_VERSION} - Loaded insights:`, enhancedInsights.length);
+    setInsights(enhancedInsights);
 
   }, [id, navigate]);
 
@@ -86,35 +87,25 @@ const EditorPage = () => {
         criteriaCount: result?.criteria?.length || 0,
         hasSummary: !!result?.summary,
         meta: result?.meta,
-        version: result?.meta?.version || 'unknown',
-        sampleInsight: (Array.isArray(result) ? result[0] : result?.insights?.[0]) ? {
-          id: (Array.isArray(result) ? result[0] : result?.insights?.[0]).id,
-          suggestion: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion,
-          suggestion_primary: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion_primary,
-          suggestion_secondary: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion_secondary,
-        } : null
+        version: result?.meta?.version || 'unknown'
       });
       
-      const ins: Insight[] = Array.isArray(result)
+      const rawInsights: Insight[] = Array.isArray(result)
         ? (result as Insight[])
         : (result?.insights ?? []);
       
-      console.log(`🔍 ${UI_VERSION} - Processed insights:`, ins.map(i => ({
-        id: i.id,
-        criterionId: i.criterionId,
-        hasSuggestion: !!i.suggestion,
-        hasPrimary: !!i.suggestion_primary,
-        hasSecondary: !!i.suggestion_secondary,
-        suggestionLength: i.suggestion?.length || 0,
-        primaryLength: i.suggestion_primary?.length || 0,
-        secondaryLength: i.suggestion_secondary?.length || 0,
-      })));
+      // Enhance insights with stable anchors
+      const enhancedInsights = rawInsights.map(insight => 
+        AnchorManager.enhanceInsightWithAnchors(insight, doc.content)
+      );
       
-      setInsights(ins);
+      console.log(`🔍 ${UI_VERSION} - Processed insights:`, enhancedInsights.length);
+      
+      setInsights(enhancedInsights);
       setMeta(result?.meta);
       setCriteria(Array.isArray(result?.criteria) ? result.criteria : []);
       setSummary(result?.summary ?? null);
-      storage.saveInsights(doc.id, ins);
+      storage.saveInsights(doc.id, enhancedInsights);
       toast({ title: "הניתוח הושלם", description: "הודגשים והערות עודכנו" });
     } catch (e) {
       console.error(`❌ ${UI_VERSION} - Analysis failed:`, e);
@@ -122,6 +113,56 @@ const EditorPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleContentChange = (newContent: string) => {
+    if (!doc) return;
+    
+    const updated = { ...doc, content: newContent, updatedAt: new Date().toISOString() };
+    setDoc(updated);
+    storage.saveDocument(updated);
+  };
+
+  const handleInsightsChange = (newInsights: Insight[]) => {
+    setInsights(newInsights);
+    if (doc) {
+      storage.saveInsights(doc.id, newInsights);
+    }
+  };
+
+  const handleApplySuggestion = (suggestion: string) => {
+    if (!selectedInsight || !doc) return;
+    
+    const start = selectedInsight.rangeStart;
+    const end = selectedInsight.rangeEnd;
+    const newContent = doc.content.slice(0, start) + suggestion + doc.content.slice(end);
+    
+    // Update document
+    const updated = { ...doc, content: newContent, updatedAt: new Date().toISOString() };
+    setDoc(updated);
+    storage.saveDocument(updated);
+    
+    // Update insights positions
+    const updatedInsights = AnchorManager.updateInsightsAfterEdit(
+      insights,
+      start,
+      end,
+      suggestion,
+      newContent
+    );
+    
+    // Mark the current insight as applied
+    const finalInsights = updatedInsights.map(insight => 
+      insight.id === selectedInsight.id 
+        ? { ...insight, isStale: true } // Mark as applied/stale
+        : insight
+    );
+    
+    setInsights(finalInsights);
+    storage.saveInsights(doc.id, finalInsights);
+    setSelectedInsight(null);
+    
+    toast({ title: "הצעה יושמה", description: "הטקסט עודכן בהתאם" });
   };
 
   const onExportDocx = async () => {
@@ -138,60 +179,6 @@ const EditorPage = () => {
     a.remove();
     URL.revokeObjectURL(url);
   };
-  
-  const scrollToInsight = (ins: Insight) => {
-    setTab("canvas");
-    // Wait for tab to render before querying DOM
-    requestAnimationFrame(() => {
-      const container = (document.getElementById("canvas-scroll") as HTMLDivElement | null) ?? canvasRef.current;
-
-      const findElement = (): HTMLElement | null => {
-        // 1) by deterministic ID
-        const byId =
-          document.getElementById(`hl-${ins.criterionId}-${ins.id}`) ||
-          document.getElementById(`hl-${ins.id}`);
-        if (byId) return byId as HTMLElement;
-
-        // 2) by data-ins within container
-        const byData = container?.querySelector<HTMLElement>(`mark[data-ins="${ins.id}"]`);
-        if (byData) return byData;
-
-        // 3) nearest by rangeStart
-        if (container) {
-          const marks = Array.from(container.querySelectorAll<HTMLElement>("mark[data-start]"));
-          let best: HTMLElement | null = null;
-          let bestDelta = Number.POSITIVE_INFINITY;
-          for (const m of marks) {
-            const s = parseInt(m.dataset.start || "0", 10);
-            const delta = Math.abs((ins.rangeStart ?? 0) - s);
-            if (delta < bestDelta) {
-              best = m;
-              bestDelta = delta;
-            }
-          }
-          if (best) return best;
-        }
-        return null;
-      };
-
-      const el = findElement();
-      if (!el) return;
-
-      // Prefer scrolling inside the canvas container
-      if (container) {
-        const rect = el.getBoundingClientRect();
-        const crect = container.getBoundingClientRect();
-        const targetTop = rect.top - crect.top + container.scrollTop - crect.height / 2 + rect.height / 2;
-        container.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
-      } else {
-        el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-      }
-
-      // Temporary visual focus
-      el.classList.add("ring-2", "ring-primary/50", "transition-shadow");
-      setTimeout(() => el.classList.remove("ring-2", "ring-primary/50", "transition-shadow"), 1300);
-    });
-  };
 
   // Show loading state while document is being loaded
   if (!doc) {
@@ -204,6 +191,8 @@ const EditorPage = () => {
       </div>
     );
   }
+
+  const stalePercentage = AnchorManager.getStalePercentage(insights);
 
   return (
     <div dir="rtl" className="min-h-screen bg-gray-50">
@@ -227,6 +216,11 @@ const EditorPage = () => {
           </div>
           
           <div className="flex items-center gap-3">
+            {stalePercentage > 10 && (
+              <Button onClick={onReanalyze} variant="outline" size="sm" className="text-yellow-600 border-yellow-600">
+                עדכן הדגשות ({stalePercentage.toFixed(0)}% לא עדכני)
+              </Button>
+            )}
             <Button onClick={onExportDocx} variant="outline" size="sm">
               יציאת DOCX
             </Button>
@@ -243,134 +237,120 @@ const EditorPage = () => {
           <div className="max-w-4xl">
             {/* Document Title Section */}
             <div className="mb-6">
-              <div className="flex items-center gap-4 mb-4">
-                <h2 className="text-xl font-medium text-gray-900">עריכת המסמך</h2>
-                <span className="text-sm text-gray-500">{doc.title}</span>
-              </div>
+              <Input
+                value={doc.title}
+                onChange={(e) => {
+                  const updated = { ...doc, title: e.target.value, updatedAt: new Date().toISOString() };
+                  setDoc(updated);
+                  storage.saveDocument(updated);
+                }}
+                placeholder="כותרת ההחלטה"
+                className="mb-4 text-lg font-medium border-0 border-b border-gray-200 rounded-none px-0 focus:ring-0 focus:border-blue-500"
+              />
             </div>
 
-            {/* Word Count */}
-            <div className="mb-4 text-sm text-gray-500">
-              מספר תווים: {doc.content.length.toLocaleString()}
+            {/* Word Count and Stats */}
+            <div className="mb-4 flex items-center gap-4 text-sm text-gray-500">
+              <span>מספר תווים: {doc.content.length.toLocaleString()}</span>
+              <span>הדגשות: {insights.filter(i => !i.isStale).length}</span>
+              {stalePercentage > 0 && (
+                <span className="text-yellow-600">
+                  {insights.filter(i => i.isStale).length} דורשות עדכון
+                </span>
+              )}
             </div>
 
-            {/* Tabs for Canvas and Text Editor */}
-            <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="canvas">תצוגת הדגשות</TabsTrigger>
-                <TabsTrigger value="editor">עריכת טקסט</TabsTrigger>
-              </TabsList>
+            {/* Overlay Editor */}
+            <DecisionEditor
+              content={doc.content}
+              insights={insights}
+              onContentChange={handleContentChange}
+              onInsightsChange={handleInsightsChange}
+              onInsightSelect={setSelectedInsight}
+              selectedInsight={selectedInsight}
+            />
 
-              <TabsContent value="canvas" className="mt-4">
-                <div className="bg-white rounded-lg border-2 border-blue-300 p-6">
-                  <div ref={canvasRef} id="canvas-scroll" className="max-h-[70vh] overflow-y-auto">
-                    <HighlightCanvas
-                      content={doc.content}
-                      insights={insights}
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="editor" className="mt-4">
-                <div className="bg-white rounded-lg border-2 border-blue-300 p-6">
-                  <Input
-                    value={doc.title}
-                    onChange={(e) => {
-                      const updated = { ...doc, title: e.target.value, updatedAt: new Date().toISOString() };
-                      setDoc(updated);
-                      storage.saveDocument(updated);
-                    }}
-                    placeholder="כותרת ההחלטה"
-                    className="mb-4 text-lg font-medium border-0 border-b border-gray-200 rounded-none px-0 focus:ring-0 focus:border-blue-500"
-                  />
-                  
-                  <Textarea
-                    className="min-h-[60vh] border-0 resize-none focus:ring-0 text-base leading-relaxed"
-                    value={doc.content}
-                    onChange={(e) => {
-                      const updated = { ...doc, content: e.target.value, updatedAt: new Date().toISOString() };
-                      setDoc(updated);
-                      storage.saveDocument(updated);
-                    }}
-                    placeholder="כתבו או הדביקו את טקסט ההחלטה כאן..."
-                  />
-                </div>
-              </TabsContent>
-            </Tabs>
+            {/* Keyboard shortcuts help */}
+            <div className="mt-4 text-xs text-gray-500">
+              <strong>קיצורי מקלדת:</strong> Alt+↑/↓ למעבר בין הדגשות | Ctrl+Enter ליישום הצעה נבחרת
+            </div>
           </div>
         </div>
 
         {/* Right Sidebar */}
         <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto max-h-screen">
-          <div className="p-6">
-            <div className="space-y-6">
-              {/* Version Info */}
-              <div className="bg-blue-50 p-3 rounded border text-xs">
-                <div className="font-semibold mb-2">🔧 Version Info:</div>
-                <div>UI: {UI_VERSION}</div>
-                <div>Backend: {meta?.version || 'unknown'}</div>
-                <div>Source: {meta?.source || 'N/A'}</div>
-              </div>
+          {selectedInsight ? (
+            <InsightDetailPanel
+              insight={selectedInsight}
+              onApplySuggestion={handleApplySuggestion}
+              onClose={() => setSelectedInsight(null)}
+            />
+          ) : (
+            <div className="p-6">
+              <div className="space-y-6">
+                {/* Version Info */}
+                <div className="bg-blue-50 p-3 rounded border text-xs">
+                  <div className="font-semibold mb-2">🔧 Version Info:</div>
+                  <div>UI: {UI_VERSION}</div>
+                  <div>Backend: {meta?.version || 'unknown'}</div>
+                  <div>Source: {meta?.source || 'N/A'}</div>
+                </div>
 
-              {/* Enhanced Debug Panel */}
-              <div className="bg-gray-50 p-3 rounded border text-xs">
-                <div className="font-semibold mb-2">🐛 Debug Info:</div>
-                <div>Insights: {insights.length}</div>
-                <div>Criteria: {criteria.length}</div>
-                <div>Summary: {summary ? '✓' : '✗'}</div>
-                <div>Meta source: {meta?.source || 'N/A'}</div>
-                <div>Meta version: {meta?.version || 'N/A'}</div>
-                {insights[0] && (
-                  <div className="mt-2 p-2 bg-white rounded border">
-                    <div className="font-medium">Sample Insight:</div>
-                    <div>ID: {insights[0].id}</div>
-                    <div>suggestion: {insights[0].suggestion ? `✓ (${insights[0].suggestion.length} chars)` : '✗'}</div>
-                    <div>suggestion_primary: {insights[0].suggestion_primary ? `✓ (${insights[0].suggestion_primary.length} chars)` : '✗'}</div>
-                    <div>suggestion_secondary: {insights[0].suggestion_secondary ? `✓ (${insights[0].suggestion_secondary.length} chars)` : '✗'}</div>
-                    {insights[0].suggestion_primary && (
-                      <div className="mt-1 text-xs text-gray-600 max-h-16 overflow-y-auto">
-                        <strong>Primary:</strong> {insights[0].suggestion_primary.substring(0, 100)}...
+                {/* Enhanced Debug Panel */}
+                <div className="bg-gray-50 p-3 rounded border text-xs">
+                  <div className="font-semibold mb-2">🐛 Debug Info:</div>
+                  <div>Insights: {insights.length}</div>
+                  <div>Active: {insights.filter(i => !i.isStale).length}</div>
+                  <div>Stale: {insights.filter(i => i.isStale).length}</div>
+                  <div>Criteria: {criteria.length}</div>
+                  <div>Summary: {summary ? '✓' : '✗'}</div>
+                </div>
+
+                {/* Feasibility Score */}
+                {summary && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-3">ציון כללי:</h4>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-gray-900 mb-1">
+                        {summary.feasibilityPercent}%
                       </div>
+                      <div className="text-sm text-gray-500 mb-3">
+                        {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : 
+                         summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 
+                         'ישימות גבוהה'}
+                      </div>
+                      <Progress value={summary.feasibilityPercent} className="h-2" />
+                    </div>
+                    
+                    {summary.reasoning && (
+                      <p className="mt-4 text-xs text-gray-600 leading-relaxed">
+                        {summary.reasoning}
+                      </p>
                     )}
                   </div>
                 )}
-              </div>
 
-              {/* Feasibility Score */}
-              {summary && (
+                {/* Quick Overview */}
                 <div>
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">ציון כללי:</h4>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-900 mb-1">
-                      {summary.feasibilityPercent}%
-                    </div>
-                    <div className="text-sm text-gray-500 mb-3">
-                      {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : 
-                       summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 
-                       'ישימות גבוהה'}
-                    </div>
-                    <Progress value={summary.feasibilityPercent} className="h-2" />
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">סקירה מהירה:</h4>
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <div>לחץ על הדגשה בטקסט לפרטים</div>
+                    <div>השתמש ב-Alt+↑/↓ לניווט</div>
+                    <div>החלף הצעות ישירות מהפאנל</div>
                   </div>
-                  
-                  {summary.reasoning && (
-                    <p className="mt-4 text-xs text-gray-600 leading-relaxed">
-                      {summary.reasoning}
-                    </p>
-                  )}
                 </div>
-              )}
 
-              {/* Detailed Criterion Analysis */}
-              <div className="border-t border-gray-200 pt-6">
-                <CriterionAccordion 
-                  criteriaData={criteria} 
-                  insights={insights} 
-                  onJump={scrollToInsight} 
-                />
+                {/* Detailed Criterion Analysis */}
+                <div className="border-t border-gray-200 pt-6">
+                  <CriterionAccordion 
+                    criteriaData={criteria} 
+                    insights={insights.filter(i => !i.isStale)} 
+                    onJump={(insight) => setSelectedInsight(insight)} 
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Footer with version */}
           <div className="border-t border-gray-200 p-4 text-center text-xs text-gray-500">
