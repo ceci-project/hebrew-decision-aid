@@ -5,6 +5,7 @@ import { CRITERIA_MAP } from '@/data/criteria';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Props {
   insight: Insight | null;
@@ -39,10 +40,10 @@ export const InsightDetailPanel: React.FC<Props> = ({
   ].filter(Boolean);
 
   return (
-    <div className="p-6 space-y-6 max-h-full overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
+    <div className="h-full flex flex-col">
+      {/* Fixed Header */}
+      <div className="flex items-start justify-between p-6 border-b border-gray-200 bg-white">
+        <div className="flex-1">
           <h3 className="text-lg font-semibold text-gray-900">
             {criterion.name}
           </h3>
@@ -73,86 +74,91 @@ export const InsightDetailPanel: React.FC<Props> = ({
         )}
       </div>
 
-      {/* Quote */}
-      <div>
-        <h4 className="text-sm font-medium text-gray-700 mb-2">הציטוט:</h4>
-        <div 
-          className="p-3 rounded border-l-4 bg-gray-50 text-sm"
-          style={{ borderLeftColor: `hsl(var(${criterion.colorVar}))` }}
-        >
-          "{insight.quote}"
-        </div>
-      </div>
+      {/* Scrollable Content */}
+      <ScrollArea className="flex-1 px-6">
+        <div className="py-6 space-y-6">
+          {/* Quote */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">הציטוט:</h4>
+            <div 
+              className="p-3 rounded border-l-4 bg-gray-50 text-sm"
+              style={{ borderLeftColor: `hsl(var(${criterion.colorVar}))` }}
+            >
+              "{insight.quote}"
+            </div>
+          </div>
 
-      {/* Explanation */}
-      {insight.explanation && (
-        <div>
-          <h4 className="text-sm font-medium text-gray-700 mb-2">הסבר:</h4>
-          <p className="text-sm text-gray-600 leading-relaxed">
-            {insight.explanation}
-          </p>
-        </div>
-      )}
+          {/* Explanation */}
+          {insight.explanation && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">הסבר:</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {insight.explanation}
+              </p>
+            </div>
+          )}
 
-      <Separator />
+          <Separator />
 
-      {/* Suggestions */}
-      {suggestions.length > 0 && (
-        <div>
-          <h4 className="text-sm font-medium text-gray-700 mb-3">הצעות לשיפור:</h4>
-          <div className="space-y-3">
-            {suggestions.map((suggestion, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">
-                    {suggestion!.label}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onApplySuggestion?.(suggestion!.text)}
-                    className="text-xs"
-                  >
-                    החלף בטקסט
-                  </Button>
-                </div>
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900">
-                  {suggestion!.text}
-                </div>
+          {/* Suggestions */}
+          {suggestions.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">הצעות לשיפור:</h4>
+              <div className="space-y-3">
+                {suggestions.map((suggestion, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-gray-500">
+                        {suggestion!.label}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onApplySuggestion?.(suggestion!.text)}
+                        className="text-xs hover:bg-blue-50 hover:border-blue-300"
+                      >
+                        החלף בטקסט
+                      </Button>
+                    </div>
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900 leading-relaxed">
+                      {suggestion!.text}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+          )}
 
-      {/* Alternatives */}
-      {insight.alternatives && insight.alternatives.length > 0 && (
-        <div>
-          <h4 className="text-sm font-medium text-gray-700 mb-2">אלטרנטיבות:</h4>
-          <ul className="space-y-1 text-sm text-gray-600">
-            {insight.alternatives.map((alt, index) => (
-              <li key={index} className="flex items-start">
-                <span className="text-gray-400 mr-2">•</span>
-                {alt}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+          {/* Alternatives */}
+          {insight.alternatives && insight.alternatives.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">אלטרנטיבות:</h4>
+              <ul className="space-y-1 text-sm text-gray-600">
+                {insight.alternatives.map((alt, index) => (
+                  <li key={index} className="flex items-start">
+                    <span className="text-gray-400 mr-2">•</span>
+                    {alt}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-      {/* Metadata */}
-      {(insight.createdAt || insight.source) && (
-        <div className="pt-4 border-t border-gray-200">
-          <div className="text-xs text-gray-500 space-y-1">
-            {insight.createdAt && (
-              <div>נוצר: {new Date(insight.createdAt).toLocaleDateString('he-IL')}</div>
-            )}
-            {insight.source && (
-              <div>מקור: {insight.source}</div>
-            )}
-          </div>
+          {/* Metadata */}
+          {(insight.createdAt || insight.source) && (
+            <div className="pt-4 border-t border-gray-200">
+              <div className="text-xs text-gray-500 space-y-1">
+                {insight.createdAt && (
+                  <div>נוצר: {new Date(insight.createdAt).toLocaleDateString('he-IL')}</div>
+                )}
+                {insight.source && (
+                  <div>מקור: {insight.source}</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </ScrollArea>
     </div>
   );
 };
