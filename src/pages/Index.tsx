@@ -1,3 +1,4 @@
+
 import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,8 @@ const Index = () => {
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
   const navigate = useNavigate();
 
+  const UI_VERSION = "App v2025-08-26-UI-3-Homepage";
+
   const handlePick = () => inputRef.current?.click();
 
   const createNewDocument = () => {
@@ -38,14 +41,16 @@ const Index = () => {
         updatedAt: now,
       };
       storage.saveDocument(doc);
+      
+      // Save insights if any exist
+      if (insights.length > 0) {
+        storage.saveInsights(doc.id, insights);
+      }
+      
       toast({ title: "מסמך נוצר בהצלחה", description: "המסמך נשמר במערכת" });
-      // Reset form
-      setTitle("מסמך חדש");
-      setContent("");
-      setInsights([]);
-      setCriteria([]);
-      setSummary(null);
-      setMeta(undefined);
+      
+      // Navigate to editor page
+      navigate(`/editor/${doc.id}`);
     } catch (e) {
       toast({ title: "שגיאה ביצירת מסמך", description: String(e) });
     } finally {
@@ -75,16 +80,48 @@ const Index = () => {
     }
     setLoading(true);
     try {
+      console.log(`🚀 ${UI_VERSION} - Starting analysis`);
+      console.log(`📊 ${UI_VERSION} - Content length:`, content.length);
+      
       const result: any = await analyzeDocument(content);
+      console.log(`📊 ${UI_VERSION} - Analysis result received:`, {
+        hasInsights: Array.isArray(result) || Array.isArray(result?.insights),
+        insightsCount: Array.isArray(result) ? result.length : (result?.insights?.length || 0),
+        hasCriteria: Array.isArray(result?.criteria),
+        criteriaCount: result?.criteria?.length || 0,
+        hasSummary: !!result?.summary,
+        meta: result?.meta,
+        version: result?.meta?.version || 'unknown',
+        sampleInsight: (Array.isArray(result) ? result[0] : result?.insights?.[0]) ? {
+          id: (Array.isArray(result) ? result[0] : result?.insights?.[0]).id,
+          suggestion: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion,
+          suggestion_primary: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion_primary,
+          suggestion_secondary: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion_secondary,
+        } : null
+      });
+      
       const ins: Insight[] = Array.isArray(result)
         ? (result as Insight[])
         : (result?.insights ?? []);
+        
+      console.log(`🔍 ${UI_VERSION} - Processed insights:`, ins.map(i => ({
+        id: i.id,
+        criterionId: i.criterionId,
+        hasSuggestion: !!i.suggestion,
+        hasPrimary: !!i.suggestion_primary,
+        hasSecondary: !!i.suggestion_secondary,
+        suggestionLength: i.suggestion?.length || 0,
+        primaryLength: i.suggestion_primary?.length || 0,
+        secondaryLength: i.suggestion_secondary?.length || 0,
+      })));
+      
       setInsights(ins);
       setMeta(result?.meta);
       setCriteria(Array.isArray(result?.criteria) ? result.criteria : []);
       setSummary(result?.summary ?? null);
       toast({ title: "הניתוח הושלם", description: "תוצאות הניתוח מוצגות בצד" });
     } catch (e) {
+      console.error(`❌ ${UI_VERSION} - Analysis failed:`, e);
       toast({ title: "שגיאה בניתוח", description: String(e) });
     } finally {
       setLoading(false);
@@ -120,7 +157,7 @@ const Index = () => {
               variant="default" 
               size="sm"
             >
-              שמור מסמך
+              שמור והעבר לעורך
             </Button>
           </div>
         </div>
@@ -190,6 +227,38 @@ const Index = () => {
         {/* Right Sidebar */}
         <div className="w-80 bg-gray-50 border-l border-gray-200 p-6">
           <div className="space-y-6">
+            {/* Version Info */}
+            <div className="bg-blue-50 p-3 rounded border text-xs">
+              <div className="font-semibold mb-2">🔧 Version Info:</div>
+              <div>UI: {UI_VERSION}</div>
+              <div>Backend: {meta?.version || 'unknown'}</div>
+              <div>Source: {meta?.source || 'N/A'}</div>
+            </div>
+
+            {/* Enhanced Debug Panel */}
+            <div className="bg-gray-50 p-3 rounded border text-xs">
+              <div className="font-semibold mb-2">🐛 Debug Info:</div>
+              <div>Insights: {insights.length}</div>
+              <div>Criteria: {criteria.length}</div>
+              <div>Summary: {summary ? '✓' : '✗'}</div>
+              <div>Meta source: {meta?.source || 'N/A'}</div>
+              <div>Meta version: {meta?.version || 'N/A'}</div>
+              {insights[0] && (
+                <div className="mt-2 p-2 bg-white rounded border">
+                  <div className="font-medium">Sample Insight:</div>
+                  <div>ID: {insights[0].id}</div>
+                  <div>suggestion: {insights[0].suggestion ? `✓ (${insights[0].suggestion.length} chars)` : '✗'}</div>
+                  <div>suggestion_primary: {insights[0].suggestion_primary ? `✓ (${insights[0].suggestion_primary.length} chars)` : '✗'}</div>
+                  <div>suggestion_secondary: {insights[0].suggestion_secondary ? `✓ (${insights[0].suggestion_secondary.length} chars)` : '✗'}</div>
+                  {insights[0].suggestion_primary && (
+                    <div className="mt-1 text-xs text-gray-600 max-h-16 overflow-y-auto">
+                      <strong>Primary:</strong> {insights[0].suggestion_primary.substring(0, 100)}...
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Quick Summary */}
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-4">סיכום מהיר</h3>
