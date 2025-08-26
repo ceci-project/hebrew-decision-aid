@@ -143,69 +143,6 @@ const Index = () => {
 
   const handleInsightClick = (insight: Insight) => {
     setSelectedInsight(insight);
-    
-    // Scroll to and select the text in the editor
-    const editorElement = document.querySelector('[contenteditable="true"]');
-    if (editorElement && insight.rangeStart !== undefined && insight.rangeEnd !== undefined) {
-      // Create a text walker to find the correct position
-      const walker = document.createTreeWalker(
-        editorElement,
-        NodeFilter.SHOW_TEXT,
-        null
-      );
-      
-      let currentOffset = 0;
-      let startNode: Text | null = null;
-      let endNode: Text | null = null;
-      let startOffset = 0;
-      let endOffset = 0;
-      
-      let node = walker.nextNode() as Text;
-      while (node) {
-        const nodeLength = node.textContent?.length || 0;
-        
-        if (!startNode && currentOffset + nodeLength > insight.rangeStart) {
-          startNode = node;
-          startOffset = insight.rangeStart - currentOffset;
-        }
-        
-        if (!endNode && currentOffset + nodeLength >= insight.rangeEnd) {
-          endNode = node;
-          endOffset = insight.rangeEnd - currentOffset;
-          break;
-        }
-        
-        currentOffset += nodeLength;
-        node = walker.nextNode() as Text;
-      }
-      
-      if (startNode && endNode) {
-        const selection = window.getSelection();
-        const range = document.createRange();
-        
-        try {
-          range.setStart(startNode, Math.max(0, startOffset));
-          range.setEnd(endNode, Math.max(0, endOffset));
-          
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-          
-          // Scroll the selected text into view
-          const rects = range.getClientRects();
-          if (rects.length > 0) {
-            const rect = rects[0];
-            const editorRect = editorElement.getBoundingClientRect();
-            
-            // Calculate if we need to scroll
-            if (rect.top < editorRect.top || rect.bottom > editorRect.bottom) {
-              editorElement.scrollTop += rect.top - editorRect.top - 100; // 100px offset from top
-            }
-          }
-        } catch (error) {
-          console.warn('Error selecting text range:', error);
-        }
-      }
-    }
   };
 
   const handleContentChange = (newContent: string) => {

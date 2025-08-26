@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Insight } from '@/types/models';
 import { CRITERIA_MAP } from '@/data/criteria';
@@ -34,7 +35,6 @@ export const DecisionEditor: React.FC<Props> = ({
   const [undoRedoManager] = useState(() => new UndoRedoManager());
   const updateTimeoutRef = useRef<NodeJS.Timeout>();
   const lastCaretPositionRef = useRef<number>(0);
-  const highlightUpdateTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Save cursor position before updates
   const saveCursorPosition = useCallback(() => {
@@ -103,7 +103,7 @@ export const DecisionEditor: React.FC<Props> = ({
     }
   }, []);
 
-  // Improved debounced update function
+  // Debounced update function
   const debouncedUpdate = useCallback((newContent: string) => {
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current);
@@ -112,7 +112,7 @@ export const DecisionEditor: React.FC<Props> = ({
     updateTimeoutRef.current = setTimeout(() => {
       onContentChange(newContent);
       undoRedoManager.saveState(newContent);
-    }, 100); // Reduced delay for better responsiveness
+    }, 200);
   }, [onContentChange, undoRedoManager]);
 
   // Handle text changes
@@ -159,107 +159,85 @@ export const DecisionEditor: React.FC<Props> = ({
     }
   }, [undoRedoManager, onContentChange, insights, onInsightsChange]);
 
-  // Improved highlight rendering with better performance
+  // Render highlights with better performance
   const renderHighlights = useCallback(() => {
     if (!editorRef.current) return;
 
-    // Clear existing timeout
-    if (highlightUpdateTimeoutRef.current) {
-      clearTimeout(highlightUpdateTimeoutRef.current);
-    }
+    const editor = editorRef.current;
+    const textContent = editor.textContent || '';
+    
+    // Clear existing highlights
+    const existingHighlights = editor.querySelectorAll('.insight-highlight');
+    existingHighlights.forEach(el => el.remove());
 
-    highlightUpdateTimeoutRef.current = setTimeout(() => {
-      if (!editorRef.current) return;
+    // Create new highlight spans
+    const spans: HighlightSpan[] = [];
+    const sortedInsights = [...insights]
+      .filter(i => !i.isStale)
+      .sort((a, b) => a.rangeStart - b.rangeStart);
 
-      const editor = editorRef.current;
-      const textContent = editor.textContent || '';
+    sortedInsights.forEach(insight => {
+      const start = Math.max(0, Math.min(insight.rangeStart, textContent.length));
+      const end = Math.max(start, Math.min(insight.rangeEnd, textContent.length));
       
-      // Clear existing highlights
-      const existingHighlights = editor.querySelectorAll('.insight-highlight');
-      existingHighlights.forEach(el => el.remove());
+      if (start < end) {
+        spans.push({ start, end, insight });
+      }
+    });
 
-      // Create new highlight spans
-      const spans: HighlightSpan[] = [];
-      const sortedInsights = [...insights]
-        .filter(i => !i.isStale)
-        .sort((a, b) => a.rangeStart - b.rangeStart);
-
-      sortedInsights.forEach(insight => {
-        const start = Math.max(0, Math.min(insight.rangeStart, textContent.length));
-        const end = Math.max(start, Math.min(insight.rangeEnd, textContent.length));
+    setHighlightSpans(spans);
+    
+    // Apply visual highlights using CSS positioning with improved performance
+    requestAnimationFrame(() => {
+      spans.forEach(span => {
+        const range = document.createRange();
+        const textNode = getTextNodeAtOffset(editor, span.start);
+        const endTextNode = getTextNodeAtOffset(editor, span.end);
         
-        if (start < end && end <= textContent.length) {
-          spans.push({ start, end, insight });
+        if (textNode && endTextNode) {
+          try {
+            range.setStart(textNode.node, textNode.offset);
+            range.setEnd(endTextNode.node, endTextNode.offset);
+            
+            const rect = range.getBoundingClientRect();
+            const editorRect = editor.getBoundingClientRect();
+            
+            if (rect.width > 0 && rect.height > 0) {
+              const highlight = document.createElement('div');
+              highlight.className = `insight-highlight absolute pointer-events-none rounded-sm transition-colors duration-150 ${
+                selectedInsight?.id === span.insight.id ? 'ring-2 ring-primary/50' : ''
+              }`;
+              
+              const criterion = CRITERIA_MAP[span.insight.criterionId] || { colorVar: '--crit-timeline' };
+              highlight.style.cssText = `
+                left: ${rect.left - editorRect.left}px;
+                top: ${rect.top - editorRect.top}px;
+                width: ${rect.width}px;
+                height: ${rect.height}px;
+                background: hsl(var(${criterion.colorVar}) / 0.2);
+                border: 1px solid hsl(var(${criterion.colorVar}) / 0.4);
+                z-index: 1;
+                pointer-events: auto;
+              `;
+              
+              highlight.addEventListener('click', (e) => {
+                e.stopPropagation();
+                onInsightSelect?.(span.insight);
+                selectTextRange(editor, span.start, span.end);
+              });
+              
+              editor.appendChild(highlight);
+              span.element = highlight;
+            }
+          } catch (error) {
+            console.warn('Error creating highlight range:', error);
+          }
         }
       });
-
-      setHighlightSpans(spans);
       
-      // Apply visual highlights with improved positioning
-      requestAnimationFrame(() => {
-        if (!editorRef.current) return;
-        
-        spans.forEach(span => {
-          const range = document.createRange();
-          const textNode = getTextNodeAtOffset(editor, span.start);
-          const endTextNode = getTextNodeAtOffset(editor, span.end);
-          
-          if (textNode && endTextNode) {
-            try {
-              range.setStart(textNode.node, Math.min(textNode.offset, textNode.node.textContent?.length || 0));
-              range.setEnd(endTextNode.node, Math.min(endTextNode.offset, endTextNode.node.textContent?.length || 0));
-              
-              const rects = range.getClientRects();
-              if (rects.length > 0) {
-                const editorRect = editor.getBoundingClientRect();
-                
-                // Create highlight for each rect (handles multi-line selections)
-                Array.from(rects).forEach((rect, index) => {
-                  if (rect.width > 0 && rect.height > 0) {
-                    const highlight = document.createElement('div');
-                    highlight.className = `insight-highlight absolute pointer-events-auto cursor-pointer rounded-sm transition-all duration-150 ${
-                      selectedInsight?.id === span.insight.id ? 'ring-2 ring-blue-500/50 z-20' : 'z-10'
-                    }`;
-                    
-                    const criterion = CRITERIA_MAP[span.insight.criterionId] || { colorVar: '--crit-timeline' };
-                    highlight.style.cssText = `
-                      left: ${rect.left - editorRect.left + editor.scrollLeft}px;
-                      top: ${rect.top - editorRect.top + editor.scrollTop}px;
-                      width: ${rect.width}px;
-                      height: ${rect.height}px;
-                      background: hsl(var(${criterion.colorVar}) / 0.25);
-                      border: 1px solid hsl(var(${criterion.colorVar}) / 0.6);
-                    `;
-                    
-                    highlight.addEventListener('click', (e) => {
-                      e.stopPropagation();
-                      onInsightSelect?.(span.insight);
-                      selectTextRange(editor, span.start, span.end);
-                    });
-                    
-                    highlight.addEventListener('mouseenter', () => {
-                      highlight.style.background = `hsl(var(${criterion.colorVar}) / 0.4)`;
-                    });
-                    
-                    highlight.addEventListener('mouseleave', () => {
-                      highlight.style.background = `hsl(var(${criterion.colorVar}) / 0.25)`;
-                    });
-                    
-                    editor.appendChild(highlight);
-                    if (index === 0) span.element = highlight;
-                  }
-                });
-              }
-            } catch (error) {
-              console.warn('Error creating highlight range:', error);
-            }
-          }
-        });
-        
-        // Restore cursor position after highlighting
-        restoreCursorPosition();
-      });
-    }, 50); // Small delay to batch updates
+      // Restore cursor position after highlighting
+      restoreCursorPosition();
+    });
   }, [insights, selectedInsight, onInsightSelect, restoreCursorPosition]);
 
   // Helper function to find text node at specific offset
@@ -314,22 +292,10 @@ export const DecisionEditor: React.FC<Props> = ({
     }
   };
 
-  // Update highlights when insights change or on scroll
+  // Update highlights when insights change
   useEffect(() => {
-    renderHighlights();
-  }, [renderHighlights]);
-
-  // Add scroll listener to update highlights on scroll
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    const handleScroll = () => {
-      renderHighlights();
-    };
-
-    editor.addEventListener('scroll', handleScroll, { passive: true });
-    return () => editor.removeEventListener('scroll', handleScroll);
+    const timer = setTimeout(renderHighlights, 50);
+    return () => clearTimeout(timer);
   }, [renderHighlights]);
 
   // Initialize undo manager with initial content
@@ -384,7 +350,7 @@ export const DecisionEditor: React.FC<Props> = ({
         <button
           onClick={handleUndo}
           disabled={!undoRedoManager.canUndo()}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
           title="ביטול (Ctrl+Z)"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -395,7 +361,7 @@ export const DecisionEditor: React.FC<Props> = ({
         <button
           onClick={handleRedo}
           disabled={!undoRedoManager.canRedo()}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
           title="חזרה (Ctrl+Y)"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
