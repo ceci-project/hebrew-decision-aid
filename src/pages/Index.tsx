@@ -190,7 +190,40 @@ const Index = () => {
   const handleInsightClick = (insight: Insight) => {
     setSelectedInsight(insight);
     
-    // Scroll to and highlight the text in the editor
+    // Check if we have a saved document that matches this insight
+    const savedDocuments = JSON.parse(localStorage.getItem('decisionDocuments') || '[]');
+    
+    // If we're not currently in the editor view and we have documents, navigate to editor
+    if (!showAnalysis || !content.trim()) {
+      // Find a document that might contain this insight
+      if (savedDocuments.length > 0) {
+        // For now, take the most recent document or try to find one that contains the quote
+        let targetDocument = savedDocuments[savedDocuments.length - 1];
+        
+        // Try to find a document that contains the insight quote
+        if (insight.quote) {
+          const docWithQuote = savedDocuments.find((doc: any) => 
+            doc.content && doc.content.includes(insight.quote)
+          );
+          if (docWithQuote) {
+            targetDocument = docWithQuote;
+          }
+        }
+        
+        console.log(`🔍 ${UI_VERSION} - Navigating to editor with document:`, targetDocument.id);
+        
+        // Navigate to editor with the document and insight
+        navigate(`/editor/${targetDocument.id}`, {
+          state: { 
+            selectedInsight: insight,
+            scrollToInsight: true
+          }
+        });
+        return;
+      }
+    }
+    
+    // If we're already in the editor or have content, scroll to the text
     if (showAnalysis && insight.rangeStart !== undefined && insight.rangeEnd !== undefined) {
       // Find the editor element
       const editorElement = document.querySelector('[contenteditable="true"]') as HTMLElement;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { storage } from "@/services/storage";
 import { analyzeDocument } from "@/services/analysis";
 import { CRITERIA, CRITERIA_MAP } from "@/data/criteria";
@@ -18,6 +18,7 @@ import type { AnalysisMeta } from "@/services/analysis";
 const EditorPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [doc, setDoc] = useState<DecisionDocument | undefined>(undefined);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [selectedInsight, setSelectedInsight] = useState<Insight | null>(null);
@@ -31,6 +32,12 @@ const EditorPage = () => {
   // Load document on component mount
   useEffect(() => {
     console.log(`🚀 ${UI_VERSION} - Editor page loaded with ID: ${id}`);
+    
+    // Check for navigation state with insight to scroll to
+    const navigationState = location.state as { selectedInsight?: Insight; scrollToInsight?: boolean } | null;
+    if (navigationState?.selectedInsight) {
+      console.log(`🎯 ${UI_VERSION} - Navigated with insight to highlight:`, navigationState.selectedInsight.id);
+    }
     
     if (!id) {
       console.error(`❌ ${UI_VERSION} - No document ID provided`);
@@ -66,7 +73,23 @@ const EditorPage = () => {
     console.log(`🔍 ${UI_VERSION} - Loaded insights:`, enhancedInsights.length);
     setInsights(enhancedInsights);
 
-  }, [id, navigate]);
+    // If we have a specific insight to highlight from navigation, set it and trigger scroll
+    if (navigationState?.scrollToInsight && navigationState?.selectedInsight) {
+      setSelectedInsight(navigationState.selectedInsight);
+      
+      // Trigger scroll after editor is rendered
+      setTimeout(() => {
+        const insight = navigationState.selectedInsight;
+        if (insight) {
+          console.log(`🎯 ${UI_VERSION} - Auto-scrolling to insight:`, insight.id);
+          window.dispatchEvent(new CustomEvent('selectInsight', {
+            detail: { insight }
+          }));
+        }
+      }, 1000); // Give more time for editor to render
+    }
+
+  }, [id, navigate, location.state]);
 
   const onReanalyze = async () => {
     if (!doc) return;
