@@ -2,7 +2,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const VERSION = "AssistantPath v2025-08-26-D-Hebrew";
+const VERSION = "AssistantPath v2025-08-26-Enhanced-Hebrew";
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
 const assistantId = Deno.env.get('ASSISTANT_ID');
@@ -40,7 +40,7 @@ serve(async (req) => {
   }
 
   try {
-    const { content, maxInsights = 6 } = await req.json();
+    const { content, maxInsights = 24 } = await req.json();
     console.log(`📋 ${VERSION} - Request parsed: contentLength=${content?.length || 0}, maxInsights=${maxInsights}`);
 
     // Check required secrets
@@ -60,16 +60,22 @@ serve(async (req) => {
       );
     }
 
-    // Pre-filter long inputs
-    const truncatedContent = content.length > 8000 ? content.substring(0, 8000) + "..." : content;
-    console.log(`📝 ${VERSION} - Content prepared: originalLength=${content.length}, truncatedLength=${truncatedContent.length}`);
+    // Enhanced content handling for long texts
+    const isLongText = content.length > 4000;
+    const adjustedMaxInsights = isLongText ? Math.max(maxInsights, 32) : maxInsights;
+    const truncatedContent = content.length > 12000 ? content.substring(0, 12000) + "..." : content;
+    console.log(`📝 ${VERSION} - Content prepared: originalLength=${content.length}, isLongText=${isLongText}, adjustedMaxInsights=${adjustedMaxInsights}, truncatedLength=${truncatedContent.length}`);
 
+    // Enhanced timeout for long texts
+    const timeoutDuration = isLongText ? 45000 : 30000; // 45s for long texts, 30s for normal
+    const maxPollingAttempts = isLongText ? 18 : 12; // More attempts for long texts
+    
     // Create AbortController for timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
 
     try {
-      console.log(`🔄 ${VERSION} - Step 1: Creating thread`);
+      console.log(`🔄 ${VERSION} - Step 1: Creating thread with timeout ${timeoutDuration}ms`);
       
       // Prepare headers - don't include OpenAI-Organization header to avoid the mismatch error
       const headers: Record<string, string> = {
@@ -78,7 +84,6 @@ serve(async (req) => {
         'OpenAI-Beta': 'assistants=v2',
       };
       
-      // Don't add OpenAI-Organization header to avoid the mismatch error
       console.log(`🔧 ${VERSION} - Using headers without OpenAI-Organization to avoid mismatch error`);
 
       // Step 1: Create a thread
@@ -99,40 +104,60 @@ serve(async (req) => {
       const threadId = thread.id;
       console.log(`✅ ${VERSION} - Thread created: ${threadId}`);
 
-      // Step 2: Add a message to the thread
-      console.log(`🔄 ${VERSION} - Step 2: Adding message to thread`);
-      const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          role: 'user',
-          content: `נתח את המסמך הממשלתי הבא ותן ביקורת על פי רובריקת 12 הקריטריונים.
+      // Enhanced prompt for better Hebrew processing and long text handling
+      const enhancedPrompt = `נתח את המסמך הממשלתי הבא ותן ביקורת מקיפה על פי רובריקת 12 הקריטריונים.
 
-חשוב מאוד: כל התוכן חייב להיות בעברית בלבד!
+🔥 הנחיות קריטיות - קרא בקפידה:
+
+1. **ניתוח מלא של הטקסט**: נתח את כל חלקי המסמך, כולל התחילה, האמצע והסוף. וודא שהתובנות מפוזרות על פני כל הטקסט.
+
+2. **ציטוטים מדויקים**: 
+   - השתמש בציטוטים קצרים ומדויקים (עד 50 תווים)
+   - הימנע מרווחים מיותרים בתחילת או סוף הציטוט
+   - ודא שהציטוט מופיע בדיוק במסמך כפי שאתה מציין
+   - אם הטקסט ארוך, קח ציטוטים מייצגים ממקומות שונים
+
+3. **כמות התובנות**: צור ${adjustedMaxInsights} תובנות ${isLongText ? '(טקסט ארוך - נדרשת כיסוי מלא)' : ''}
+
+4. **עברית בלבד**: כל התוכן חייב להיות בעברית מושלמת!
 
 עבור כל insight, כלול:
-- explanation: הסבר כללי בעברית מה הבעיה או החוזקה
-- suggestion: הצעה ראשונית קצרה לשיפור בעברית
-- suggestion_primary: הצעה מפורטת ראשונית בעברית (50-100 מילים)
-- suggestion_secondary: הצעה חלופית או משלימה בעברית (50-100 מילים)
+- explanation: הסבר ברור ומדויק של הבעיה או החוזקה (20-40 מילים)
+- suggestion: הצעה קצרה לשיפור (10-20 מילים)  
+- suggestion_primary: הצעה מפורטת ראשונית (40-80 מילים)
+- suggestion_secondary: הצעה חלופית או משלימה (40-80 מילים)
+- quote: ציטוט קצר ומדויק מהמסמך (עד 50 תווים)
 
-כל השדות הטקסטואליים חייבים להיות בעברית בלבד: explanation, suggestion, suggestion_primary, suggestion_secondary, justification, reasoning, name.
+${isLongText ? `
+⚠️ טקסט ארוך - הנחיות נוספות:
+- פזר תובנות על פני כל הטקסט (תחילה, אמצע, סוף)
+- ודא שאתה מנתח גם את החלקים המאוחרים של המסמך
+- תן עדיפות לנושאים מרכזיים שחוזרים על עצמם
+- השתמש בציטוטים מייצגים ממקטעים שונים
+` : ''}
 
 תוכן המסמך:
 """
 ${truncatedContent}
 """
 
-החזר רק JSON עם המבנה הבא:
+החזר רק JSON עם המבנה הבא (ללא טקסט נוסף):
 {
   "criteria": [12 קריטריונים עם id, name (בעברית), weight, score, justification (בעברית), evidence],
   "summary": { "feasibilityPercent": מספר, "feasibilityLevel": "low/medium/high", "reasoning": "הסבר בעברית" },
-  "insights": [תובנות עם id, criterionId, quote, explanation (בעברית), suggestion (בעברית), suggestion_primary (בעברית), suggestion_secondary (בעברית), rangeStart, rangeEnd]
+  "insights": [${adjustedMaxInsights} תובנות עם id, criterionId, quote, explanation (בעברית), suggestion (בעברית), suggestion_primary (בעברית), suggestion_secondary (בעברית), rangeStart, rangeEnd]
 }
 
-מגבל insights ל-${maxInsights} פריטים.
+זכור: כל הטקסט בעברית, ציטוטים מדויקים וקצרים, כיסוי מלא של הטקסט!`;
 
-זכור: כל הטקסט חייב להיות בעברית בלבד!`,
+      // Step 2: Add a message to the thread
+      console.log(`🔄 ${VERSION} - Step 2: Adding enhanced message to thread`);
+      const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          role: 'user',
+          content: enhancedPrompt,
         }),
         signal: controller.signal,
       });
@@ -143,7 +168,7 @@ ${truncatedContent}
         throw new Error(`Failed to create message: ${messageError.error?.message || 'Unknown error'}`);
       }
 
-      console.log(`✅ ${VERSION} - Message added to thread`);
+      console.log(`✅ ${VERSION} - Enhanced message added to thread`);
 
       // Step 3: Run the assistant
       console.log(`🔄 ${VERSION} - Step 3: Running assistant ${assistantId}`);
@@ -167,16 +192,15 @@ ${truncatedContent}
       const runId = run.id;
       console.log(`✅ ${VERSION} - Run created: ${runId}, status: ${run.status}`);
 
-      // Step 4: Poll for completion
-      console.log(`🔄 ${VERSION} - Step 4: Polling for completion`);
+      // Step 4: Enhanced polling for completion
+      console.log(`🔄 ${VERSION} - Step 4: Enhanced polling (max attempts: ${maxPollingAttempts})`);
       let runStatus = run.status;
       let attempts = 0;
-      const maxAttempts = 12; // 24 seconds timeout (12 * 2 seconds)
 
-      while (['queued', 'in_progress'].includes(runStatus) && attempts < maxAttempts) {
+      while (['queued', 'in_progress'].includes(runStatus) && attempts < maxPollingAttempts) {
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
         attempts++;
-        console.log(`🔄 ${VERSION} - Polling attempt ${attempts}/${maxAttempts}, current status: ${runStatus}`);
+        console.log(`🔄 ${VERSION} - Polling attempt ${attempts}/${maxPollingAttempts}, current status: ${runStatus}`);
 
         try {
           const statusResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
@@ -205,7 +229,7 @@ ${truncatedContent}
         throw new Error(`Analysis timed out or failed with status: ${runStatus}`);
       }
 
-      console.log(`✅ ${VERSION} - Run completed successfully`);
+      console.log(`✅ ${VERSION} - Run completed successfully after ${attempts} polling attempts`);
 
       // Step 5: Get the messages
       console.log(`🔄 ${VERSION} - Step 5: Retrieving messages`);
@@ -231,26 +255,39 @@ ${truncatedContent}
       const responseText = assistantMessage.content[0].text.value;
       console.log(`📄 ${VERSION} - Response received, length: ${responseText.length}`);
 
-      // Parse the response with fallback
+      // Enhanced JSON parsing with better error handling
       let parsed: any;
       try {
-        // Try to extract JSON from the response
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        const jsonText = jsonMatch ? jsonMatch[0] : responseText;
+        // Try multiple JSON extraction methods
+        let jsonText = responseText.trim();
+        
+        // Method 1: Look for JSON blocks in markdown
+        const markdownJsonMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+        if (markdownJsonMatch) {
+          jsonText = markdownJsonMatch[1];
+        } else {
+          // Method 2: Extract the largest JSON object
+          const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            jsonText = jsonMatch[0];
+          }
+        }
+        
         parsed = JSON.parse(jsonText);
         console.log(`✅ ${VERSION} - JSON parsed successfully`);
       } catch (parseError) {
         console.error(`❌ ${VERSION} - JSON parse failed:`, parseError);
-        // Fallback to empty structure
+        console.error(`Raw response (first 500 chars):`, responseText.substring(0, 500));
+        // Enhanced fallback structure
         parsed = { insights: [], criteria: [], summary: null };
       }
 
-      // Process and validate the response
+      // Enhanced processing and validation
       let insights = Array.isArray(parsed.insights)
-        ? parsed.insights.slice(0, maxInsights).map((i: any, idx: number) => ({
+        ? parsed.insights.slice(0, adjustedMaxInsights).map((i: any, idx: number) => ({
             id: String(i?.id ?? `assistant-${idx}`),
             criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
-            quote: String(i?.quote ?? ''),
+            quote: String(i?.quote ?? '').trim(), // Trim whitespace from quotes
             explanation: String(i?.explanation ?? ''),
             suggestion: String(i?.suggestion ?? ''),
             suggestion_primary: String(i?.suggestion_primary ?? i?.suggestion ?? ''),
@@ -268,26 +305,30 @@ ${truncatedContent}
             score: Math.max(0, Math.min(5, Number(c?.score) || 0)),
             justification: String(c?.justification ?? ''),
             evidence: Array.isArray(c?.evidence) ? c.evidence.map((e: any) => ({
-              quote: String(e?.quote ?? ''),
+              quote: String(e?.quote ?? '').trim(), // Trim evidence quotes too
               rangeStart: Number.isFinite(e?.rangeStart) ? e.rangeStart : 0,
               rangeEnd: Number.isFinite(e?.rangeEnd) ? e.rangeEnd : 0,
             })) : [],
           }))
         : [];
 
-      // Synthesize insights from criteria evidence if missing
-      if ((!insights || insights.length === 0) && Array.isArray(criteria)) {
+      // Enhanced synthesis from criteria evidence with better distribution
+      if ((!insights || insights.length < adjustedMaxInsights * 0.5) && Array.isArray(criteria)) {
+        console.log(`🔄 ${VERSION} - Synthesizing additional insights from criteria evidence`);
         const synth: any[] = [];
+        const existingByCrit = new Set(insights.map((i) => i.criterionId));
+        
         for (const c of criteria) {
           if (Array.isArray(c.evidence) && c.evidence.length) {
-            for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
+            const evidenceToUse = existingByCrit.has(c.id) ? 1 : Math.min(c.evidence.length, 2);
+            for (let k = 0; k < evidenceToUse; k++) {
               const e = c.evidence[k];
               const defaultSuggestions = getDefaultSuggestions(c.id);
               synth.push({
                 id: `${c.id}-ev-${k}`,
                 criterionId: c.id,
-                quote: String(e.quote || ''),
-                explanation: c.justification || `חיזוק: ${c.name}`,
+                quote: String(e.quote || '').trim(),
+                explanation: c.justification || `תובנה עבור ${c.name}`,
                 suggestion: defaultSuggestions.primary,
                 suggestion_primary: defaultSuggestions.primary,
                 suggestion_secondary: defaultSuggestions.secondary,
@@ -297,8 +338,10 @@ ${truncatedContent}
             }
           }
         }
+        
         if (synth.length) {
-          insights = synth.slice(0, maxInsights);
+          insights = [...insights, ...synth].slice(0, adjustedMaxInsights);
+          console.log(`✅ ${VERSION} - Added ${synth.length} synthesized insights`);
         }
       }
 
@@ -317,20 +360,14 @@ ${truncatedContent}
       }
 
       console.log(`🎉 ${VERSION} - Analysis completed successfully: ${insights.length} insights, ${criteria.length} criteria`);
-      console.log(`📊 ${VERSION} - Sample insight check:`, insights[0] ? {
-        id: insights[0].id,
-        hasSuggestion: !!insights[0].suggestion,
-        hasPrimary: !!insights[0].suggestion_primary,
-        hasSecondary: !!insights[0].suggestion_secondary,
-        isHebrew: /[\u0590-\u05FF]/.test(insights[0].explanation || '')
-      } : 'No insights');
+      console.log(`📊 ${VERSION} - Final stats: { isLongText: ${isLongText}, originalLength: ${content.length}, insights: ${insights.length}, adjustedMaxInsights: ${adjustedMaxInsights} }`);
 
       return new Response(
         JSON.stringify({ 
           insights, 
           criteria, 
           summary, 
-          meta: { source: 'assistants', threadId, runId, version: VERSION } 
+          meta: { source: 'assistants', threadId, runId, version: VERSION, isLongText, originalLength: content.length } 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -350,61 +387,61 @@ ${truncatedContent}
   }
 });
 
-// Helper function to provide default suggestions for each criterion in Hebrew
+// Enhanced helper function with more comprehensive suggestions for each criterion in Hebrew
 function getDefaultSuggestions(criterionId: string): { primary: string; secondary: string } {
   const suggestions: Record<string, { primary: string; secondary: string }> = {
     timeline: {
-      primary: "הוסיפו לוחות זמנים מחייבים עם תאריכי יעד ברורים וסנקציות באי-עמידה בהם.",
-      secondary: "צרו מערכת מעקב ודיווח שבועית על התקדמות מול הלוח זמנים המתוכנן."
+      primary: "הוסיפו לוחות זמנים מחייבים עם תאריכי יעד ברורים, אבני דרך ביניים וסנקציות באי-עמידה בהם.",
+      secondary: "צרו מערכת מעקב ודיווח שבועית על התקדמות מול הלוח זמנים עם התראות מוקדמות על עיכובים."
     },
     integrator: {
-      primary: "הגדירו צוות מתכלל עם הרכב מוגדר, סמכויות ברורות ותדירות ישיבות קבועה.",
-      secondary: "קבעו נהלים ברורים לתיאום בין-משרדי וגורמים שונים עם אחריות מוגדרת."
+      primary: "הגדירו צוות מתכלל עם הרכב מוגדר, סמכויות ברורות, תדירות ישיבות קבועה ונהלי קבלת החלטות.",
+      secondary: "קבעו נהלים ברורים לתיאום בין-משרדי וגורמים שונים עם אחריות מוגדרת ומנגנוני יישוב סכסוכים."
     },
     reporting: {
-      primary: "קבעו מנגנון דיווח סדיר: תדירות, פורמט סטנדרטי וטיפול בחריגות.",
-      secondary: "הקימו מערכת מחוונים למעקב אחר התקדמות והישגים."
+      primary: "קבעו מנגנון דיווח סדיר: תדירות קבועה, פורמט סטנדרטי, מדדי ביצוע וטיפול בחריגות.",
+      secondary: "הקימו מערכת מחוונים דיגיטלית למעקב בזמן אמת אחר התקדמות והישגים עם דשבורד מנהלים."
     },
     evaluation: {
-      primary: "הוסיפו מדדים כמותיים ושיטת הערכה המבוצעת באופן מחזורי.",
-      secondary: "קבעו גורם חיצוני להערכת השפעה ויעילות התוכנית."
+      primary: "הוסיפו מדדים כמותיים ואיכותיים ברורים, שיטת הערכה מחזורית ותיעוד שיטתי של תוצאות.",
+      secondary: "קבעו גורם חיצוני עצמאי להערכת השפעה ויעילות התוכנית עם בדיקות איכות תקופתיות."
     },
     external_audit: {
-      primary: "קבעו ביקורת חיצונית עצמאית, מועדים קבועים וחובת פרסום הממצאים.",
-      secondary: "הגדירו נהלי טיפול בממצאי הביקורת ומעקב אחר יישום ההמלצות."
+      primary: "קבעו ביקורת חיצונית עצמאית עם מועדים קבועים, מתודולוגיה ברורה וחובת פרסום הממצאים.",
+      secondary: "הגדירו נהלי טיפול בממצאי הביקורת, לוחות זמנים ליישום המלצות ומעקב אחר השלמתם."
     },
     resources: {
-      primary: "פרטו את התקציב הנדרש, מקורות המימון וכוח האדם הדרוש לביצוע.",
-      secondary: "קבעו מנגנון לבקרת תקציב ורזרבות לטיפול בחריגות עלות."
+      primary: "פרטו את התקציב הנדרש לפי שנים ופעילויות, מקורות המימון וכוח האדם הדרוש לביצוע.",
+      secondary: "קבעו מנגנון בקרת תקציב שוטף עם רזרבות לטיפול בחריגות עלות ונהלי אישור שינויים."
     },
     multi_levels: {
-      primary: "הבהירו את חלוקת האחריות בין הדרגים והחלטות התיאום ביניהם.",
-      secondary: "צרו מערכת תקשורת ודיווח בין הרמות השונות עם הגדרת ממשקים."
+      primary: "הבהירו את חלוקת האחריות והסמכויות בין הדרגים השונים עם הגדרת ממשקי עבודה ברורים.",
+      secondary: "צרו מערכת תקשורת ודיווח היררכית בין הרמות השונות עם הגדרת נהלי הסלמה ותיאום."
     },
     structure: {
-      primary: "חלקו את התוכנית למשימות ספציפיות עם בעלי תפקידים ואבני דרך ברורות.",
-      secondary: "הגדירו מבנה ארגוני ברור עם תיאור תפקידים וסמכויות לכל רמה."
+      primary: "חלקו את התוכנית למשימות ספציפיות עם בעלי תפקידים מוגדרים, אבני דרך ברורות ומדדי הצלחה.",
+      secondary: "הגדירו מבנה ארגוני היררכי עם תיאורי תפקידים מפורטים, סמכויות ברורות ונהלי עבודה לכל רמה."
     },
     field_implementation: {
-      primary: "תארו בפירוט את היישום בשטח: מי מבצע, איך, באילו סמכויות ופיקוח.",
-      secondary: "הקימו מערכת הכשרה ותמיכה למבצעים בשטח עם כלים מעשיים."
+      primary: "תארו בפירוט את היישום בשטח: מי מבצע, איך, באילו סמכויות, פיקוח ובקרה יומיומית.",
+      secondary: "הקימו מערכת הכשרה והדרכה למבצעים בשטח עם כלים מעשיים, מדריכים ותמיכה שוטפת."
     },
     arbitrator: {
-      primary: "מנו גורם מכריע עם זמן תגובה ברור לקבלת החלטות וחסימות.",
-      secondary: "הגדירו נהלי הסלמה וקבלת החלטות במקרים מורכבים או חריגים."
+      primary: "מנו גורם מכריע בכיר עם זמן תגובה ברור לקבלת החלטות בחסימות וסכסוכים בין-ארגוניים.",
+      secondary: "הגדירו נהלי הסלמה מדורגים וקבלת החלטות במקרים מורכבים עם סמכויות חד-משמעיות."
     },
     cross_sector: {
-      primary: "שלבו מנגנון שיתוף ציבור ובעלי עניין רלוונטיים עם תיאום בין-משרדי.",
-      secondary: "צרו ועדת היגוי רב-גזרית עם נציגות מכל הגורמים הרלוונטיים."
+      primary: "שלבו מנגנון שיתוף פעולה עם ציבור ובעלי עניין רלוונטיים, תיאום בין-משרדי וממשק עם מגזר פרטי.",
+      secondary: "צרו ועדת היגוי רב-גזרית עם נציגות רחבה מכל הגורמים הרלוונטיים ומנגנון קבלת החלטות קונסנזואלי."
     },
     outcomes: {
-      primary: "הגדירו מדדי תוצאה ברורים ויעדי הצלחה מספריים וניתנים למדידה.",
-      secondary: "קבעו מערכת מעקב אחר השפעה ארוכת טווח עם הערכה תקופתית."
+      primary: "הגדירו מדדי תוצאה ברורים ויעדי הצלחה מספריים הניתנים למדידה עם לוחות זמנים ספציפיים.",
+      secondary: "קבעו מערכת מעקב אחר השפעה ארוכת טווח עם הערכה תקופתית והשוואה למדינות דומות."
     }
   };
 
   return suggestions[criterionId] || {
-    primary: "שפרו את הסעיף בהתאם לדרישות הרובריקה.",
-    secondary: "הוסיפו פירוט נוסף ומנגנוני בקרה מתאימים."
+    primary: "שפרו את הסעיף בהתאם לדרישות הרובריקה עם פירוט נוסף והגדרות ברורות יותר.",
+    secondary: "הוסיפו מנגנוני בקרה ומעקב מתאימים עם הגדרת אחריות ולוחות זמנים לביצוע."
   };
 }
