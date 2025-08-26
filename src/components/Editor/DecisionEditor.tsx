@@ -112,39 +112,110 @@ export const DecisionEditor: React.FC<Props> = ({
       const { insight } = event.detail;
       const rangeStart = insight?.rangeStart;
       const rangeEnd = insight?.rangeEnd;
+      const quote = insight?.quote;
+      
       console.log('🎯 DecisionEditor - Received selectInsight event:', { 
         insightId: insight?.id,
         rangeStart, 
         rangeEnd,
-        quote: insight?.quote?.substring(0, 50) + '...'
+        quote: quote?.substring(0, 50) + '...'
       });
       
-      // Just scroll to the range without selecting text (to avoid jumping to corner)
-      setTimeout(() => {
-        const range = document.createRange();
-        const startNode = getTextNodeAtOffset(editor, rangeStart);
-        const endNode = getTextNodeAtOffset(editor, rangeEnd);
+      // Wait for editor to be ready and content to be rendered
+      const scrollToText = () => {
+        const currentContent = editor.textContent || '';
         
-        if (startNode && endNode) {
-          try {
-            range.setStart(startNode.node, startNode.offset);
-            range.setEnd(endNode.node, endNode.offset);
-            
-            const rect = range.getBoundingClientRect();
-            const editorRect = editor.getBoundingClientRect();
-            
-            // Scroll to center the text
-            if (rect.top < editorRect.top || rect.bottom > editorRect.bottom) {
-              editor.scrollTo({
-                top: editor.scrollTop + (rect.top - editorRect.top) - (editorRect.height / 2),
-                behavior: 'smooth'
-              });
+        // Validate that rangeStart and rangeEnd match the quote
+        let actualRangeStart = rangeStart;
+        let actualRangeEnd = rangeEnd;
+        
+        if (quote && currentContent) {
+          const extractedText = currentContent.substring(rangeStart, rangeEnd);
+          
+          // If the extracted text doesn't match the quote, try to find it
+          if (extractedText !== quote) {
+            console.log('🔍 Quote mismatch, searching for correct position...');
+            const foundIndex = currentContent.indexOf(quote);
+            if (foundIndex !== -1) {
+              actualRangeStart = foundIndex;
+              actualRangeEnd = foundIndex + quote.length;
+              console.log('✅ Found quote at position:', actualRangeStart, actualRangeEnd);
+            } else {
+              console.warn('❌ Quote not found in document:', quote);
+              return;
             }
+          }
+        }
+        
+        const startNode = getTextNodeAtOffset(editor, actualRangeStart);
+        
+        if (startNode) {
+          try {
+            // Create a temporary span to mark the location
+            const range = document.createRange();
+            range.setStart(startNode.node, startNode.offset);
+            range.setEnd(startNode.node, startNode.offset);
+            
+            // Use scrollIntoView for better positioning
+            const rect = range.getBoundingClientRect();
+            const tempElement = document.createElement('span');
+            tempElement.style.position = 'absolute';
+            tempElement.style.top = rect.top + 'px';
+            tempElement.style.left = rect.left + 'px';
+            tempElement.style.height = '1px';
+            tempElement.style.width = '1px';
+            document.body.appendChild(tempElement);
+            
+            tempElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+            
+            setTimeout(() => {
+              document.body.removeChild(tempElement);
+            }, 100);
+            
+            // Highlight the text temporarily
+            if (quote && actualRangeStart !== undefined && actualRangeEnd !== undefined) {
+              const endNode = getTextNodeAtOffset(editor, actualRangeEnd);
+              if (endNode) {
+                const selection = window.getSelection();
+                const highlightRange = document.createRange();
+                highlightRange.setStart(startNode.node, startNode.offset);
+                highlightRange.setEnd(endNode.node, endNode.offset);
+                
+                selection?.removeAllRanges();
+                selection?.addRange(highlightRange);
+                
+                // Remove selection after 2 seconds
+                setTimeout(() => {
+                  selection?.removeAllRanges();
+                }, 2000);
+              }
+            }
+            
           } catch (error) {
             console.warn('Error scrolling to insight:', error);
           }
+        } else {
+          console.warn('Could not find text node for position:', actualRangeStart);
         }
-      }, 100);
+      };
+      
+      // Check if content is ready, otherwise wait
+      if (editor.textContent && editor.textContent.length > 0) {
+        setTimeout(scrollToText, 100);
+      } else {
+        // Wait for content to load
+        const checkContent = () => {
+          if (editor.textContent && editor.textContent.length > 0) {
+            scrollToText();
+          } else {
+            setTimeout(checkContent, 200);
+          }
+        };
+        checkContent();
+      }
     };
 
     editor.addEventListener('selectInsight', handleSelectInsight as EventListener);
