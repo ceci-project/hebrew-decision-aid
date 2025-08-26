@@ -1,3 +1,4 @@
+
 export interface DecisionDocument {
   id: string;
   title: string;
@@ -20,6 +21,8 @@ export interface Insight {
   quote: string;
   explanation: string;
   suggestion: string;
+  suggestion_primary?: string; // הצעה ראשונית
+  suggestion_secondary?: string; // הצעה משנית
   rangeStart: number;
   rangeEnd: number;
   // Optional extended fields for EditorAI findings

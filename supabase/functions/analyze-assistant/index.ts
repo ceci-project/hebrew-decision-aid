@@ -68,7 +68,7 @@ serve(async (req) => {
     const thread = await threadResponse.json();
     const threadId = thread.id;
 
-    // Step 2: Add a message to the thread
+    // Step 2: Add a message to the thread with improved prompt for structured suggestions
     const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
       method: 'POST',
       headers: {
@@ -78,7 +78,13 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         role: 'user',
-        content: `נתח את המסמך הממשלתי הבא ותן ביקורת על פי רובריקת 12 הקריטריונים. החזר תוצאה בפורמט JSON עם שדות: criteria, summary, insights.
+        content: `נתח את המסמך הממשלתי הבא ותן ביקורת על פי רובריקת 12 הקריטריונים. 
+
+עבור כל insight, כלול:
+- explanation: הסבר כללי מה הבעיה או החוזקה
+- suggestion: הצעה ראשונית קצרה לשיפור
+- suggestion_primary: הצעה מפורטת ראשונית (50-100 מילים)
+- suggestion_secondary: הצעה חלופית או משלימה (50-100 מילים)
 
 תוכן המסמך:
 """
@@ -89,7 +95,7 @@ ${content}
 {
   "criteria": [12 קריטריונים עם id, name, weight, score, justification, evidence],
   "summary": { "feasibilityPercent": מספר, "feasibilityLevel": "low/medium/high", "reasoning": הסבר },
-  "insights": [תובנות עם id, criterionId, quote, explanation, suggestion, rangeStart, rangeEnd]
+  "insights": [תובנות עם id, criterionId, quote, explanation, suggestion, suggestion_primary, suggestion_secondary, rangeStart, rangeEnd]
 }
 
 מגבל insights ל-${maxInsights} פריטים.`,
@@ -188,7 +194,7 @@ ${content}
       parsed = { insights: [], criteria: [], summary: null };
     }
 
-    // Process and validate the response (same logic as analyze-openai)
+    // Process and validate the response with enhanced suggestion handling
     let insights = Array.isArray(parsed.insights)
       ? parsed.insights.map((i: any, idx: number) => ({
           id: String(i?.id ?? `assistant-${idx}`),
@@ -196,6 +202,8 @@ ${content}
           quote: String(i?.quote ?? ''),
           explanation: String(i?.explanation ?? ''),
           suggestion: String(i?.suggestion ?? ''),
+          suggestion_primary: String(i?.suggestion_primary ?? ''),
+          suggestion_secondary: String(i?.suggestion_secondary ?? ''),
           rangeStart: Number.isFinite(i?.rangeStart) ? i.rangeStart : 0,
           rangeEnd: Number.isFinite(i?.rangeEnd) ? i.rangeEnd : 0,
         }))
@@ -223,12 +231,15 @@ ${content}
         if (Array.isArray(c.evidence) && c.evidence.length) {
           for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
             const e = c.evidence[k];
+            const defaultSuggestions = getDefaultSuggestions(c.id);
             synth.push({
               id: `${c.id}-ev-${k}`,
               criterionId: c.id,
               quote: String(e.quote || ''),
               explanation: c.justification || `חיזוק: ${c.name}`,
-              suggestion: `שפרו את הסעיף "${c.name}" בהתאם לרובריקה.`,
+              suggestion: defaultSuggestions.primary,
+              suggestion_primary: defaultSuggestions.primary,
+              suggestion_secondary: defaultSuggestions.secondary,
               rangeStart: Number.isFinite(e.rangeStart) ? e.rangeStart : 0,
               rangeEnd: Number.isFinite(e.rangeEnd) ? e.rangeEnd : 0,
             });
@@ -271,3 +282,62 @@ ${content}
     );
   }
 });
+
+// Helper function to provide default suggestions for each criterion
+function getDefaultSuggestions(criterionId: string): { primary: string; secondary: string } {
+  const suggestions: Record<string, { primary: string; secondary: string }> = {
+    timeline: {
+      primary: "הוסיפו לוחות זמנים מחייבים עם תאריכי יעד ברורים וסנקציות באי-עמידה בהם.",
+      secondary: "צרו מערכת מעקב ודיווח שבועית על התקדמות מול הלוח זמנים המתוכנן."
+    },
+    integrator: {
+      primary: "הגדירו צוות מתכלל עם הרכב מוגדר, סמכויות ברורות ותדירות ישיבות קבועה.",
+      secondary: "קבעו נהלים ברורים לתיאום בין-משרדי וגורמים שונים עם אחריות מוגדרת."
+    },
+    reporting: {
+      primary: "קבעו מנגנון דיווח סדיר: תדירות, פורמט סטנדרטי וטיפול בחריגות.",
+      secondary: "הקימו מערכת מחוונים (KPIs) למעקב אחר התקדמות והישגים."
+    },
+    evaluation: {
+      primary: "הוסיפו מדדים כמותיים ושיטת הערכה המבוצעת באופן מחזורי.",
+      secondary: "קבעו גורם חיצוני להערכת השפעה ויעילות התוכנית."
+    },
+    external_audit: {
+      primary: "קבעו ביקורת חיצונית עצמאית, מועדים קבועים וחובת פרסום הממצאים.",
+      secondary: "הגדירו נהלי טיפול בממצאי הביקורת ומעקב אחר יישום ההמלצות."
+    },
+    resources: {
+      primary: "פרטו את התקציב הנדרש, מקורות המימון וכוח האדם הדרוש לביצוע.",
+      secondary: "קבעו מנגנון לבקרת תקציב ורזרבות לטיפול בחריגות עלות."
+    },
+    multi_levels: {
+      primary: "הבהירו את חלוקת האחריות בין הדרגים והחלטות התיאום ביניהם.",
+      secondary: "צרו מערכת תקשורת ודיווח בין הרמות השונות עם הגדרת ממשקים."
+    },
+    structure: {
+      primary: "חלקו את התוכנית למשימות ספציפיות עם בעלי תפקידים ואבני דרך ברורות.",
+      secondary: "הגדירו מבנה ארגוני ברור עם תיאור תפקידים וסמכויות לכל רמה."
+    },
+    field_implementation: {
+      primary: "תארו בפירוט את היישום בשטח: מי מבצע, איך, באילו סמכויות ופיקוח.",
+      secondary: "הקימו מערכת הכשרה ותמיכה למבצעים בשטח עם כלים מעשיים."
+    },
+    arbitrator: {
+      primary: "מנו גורם מכריע עם SLA ברור לקבלת החלטות וחסימות.",
+      secondary: "הגדירו נהלי הסלמה וקבלת החלטות במקרים מורכבים או חריגים."
+    },
+    cross_sector: {
+      primary: "שלבו מנגנון שיתוף ציבור ובעלי עניין רלוונטיים עם תיאום בין-משרדי.",
+      secondary: "צרו ועדת היגוי רב-גזרית עם נציגות מכל הגורמים הרלוונטיים."
+    },
+    outcomes: {
+      primary: "הגדירו מדדי תוצאה ברורים ויעדי הצלחה מספריים וניתנים למדידה.",
+      secondary: "קבעו מערכת מעקב אחר השפעה ארוכת טווח עם הערכה תקופתית."
+    }
+  };
+
+  return suggestions[criterionId] || {
+    primary: "שפרו את הסעיף בהתאם לדרישות הרובריקה.",
+    secondary: "הוסיפו פירוט נוסף ומנגנוני בקרה מתאימים."
+  };
+}

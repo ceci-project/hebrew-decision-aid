@@ -199,6 +199,8 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
         quote,
         explanation: String(i.explanation ?? ''),
         suggestion: String(i.suggestion ?? ''),
+        suggestion_primary: String(i.suggestion_primary ?? ''),
+        suggestion_secondary: String(i.suggestion_secondary ?? ''),
         rangeStart,
         rangeEnd,
         anchor: i.anchor ? String(i.anchor) : undefined,
@@ -238,12 +240,15 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
       if (!existingByCrit.has(c.id) && Array.isArray(c.evidence) && c.evidence.length) {
         for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
           const e = c.evidence[k];
+          const suggestion = getDefaultSuggestion(c.id);
           synthesized.push({
             id: `${c.id}-ev-${k}`,
             criterionId: c.id,
             quote: String(e.quote || ''),
             explanation: c.justification || `חיזוק: ${c.name}`,
-            suggestion: getDefaultSuggestion(c.id),
+            suggestion,
+            suggestion_primary: suggestion,
+            suggestion_secondary: `הוסיפו מנגנוני בקרה ומעקב נוספים עבור ${c.name}.`,
             rangeStart: Number.isFinite((e as any).rangeStart) ? (e as any).rangeStart : 0,
             rangeEnd: Number.isFinite((e as any).rangeEnd) ? (e as any).rangeEnd : 0,
           });
