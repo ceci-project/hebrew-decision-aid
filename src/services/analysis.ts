@@ -3,14 +3,27 @@ import { Insight } from "@/types/models";
 import { CRITERIA_MAP } from "@/data/criteria";
 import { supabase } from "@/integrations/supabase/client";
 
-const DELAY_MS = 1000; // Reduced delay for better UX
+const DELAY_MS = 2000; // 2 seconds before showing results
+
+function pickMatches(content: string, term: string): number[] {
+  const idxs: number[] = [];
+  let startIndex = 0;
+  while (true) {
+    const idx = content.indexOf(term, startIndex);
+    if (idx === -1) break;
+    idxs.push(idx);
+    startIndex = idx + term.length;
+    if (idxs.length >= 3) break; // limit for demo
+  }
+  return idxs;
+}
 
 export interface AnalysisMeta {
   source: 'assistants' | 'openai' | 'local';
-  model?: string;
+  assistantId?: string;
+  runId?: string;
+  model?: string | null;
   version?: string;
-  duration?: string;
-  adjustedMaxInsights?: number;
 }
 
 export interface AnalysisResult {
@@ -28,327 +41,341 @@ export interface AnalysisResult {
 }
 
 export async function analyzeDocument(content: string): Promise<AnalysisResult> {
-  if (!content || !content.trim()) {
-    return { 
-      insights: [], 
-      meta: { source: 'local' },
-      summary: { feasibilityPercent: 0, feasibilityLevel: 'low', reasoning: 'לא ניתן לנתח מסמך ריק' }
-    };
-  }
+  if (!content || !content.trim()) return { insights: [], meta: { source: 'local' } };
   
+  // Enhanced preprocessing for long texts
   const isLongText = content.length > 4000;
-  const targetInsights = isLongText ? 32 : 24;
+  console.log(`📏 Analysis - Text length: ${content.length}, isLong: ${isLongText}`);
   
-  console.log(`📏 Analysis starting - Text: ${content.length} chars, Target: ${targetInsights} insights`);
-  
+  // Try server-side AI first (Assistants), then fallback to OpenAI function
   try {
-    console.log('🤖 Trying AI analysis...');
-    
-    const tryInvoke = async (fnName: string, timeout: number) => {
-      console.log(`📡 Calling ${fnName} with ${timeout}ms timeout`);
+    const tryInvoke = async (fnName: string) => {
+      const requestTimeout = isLongText ? 45000 : 30000; // Longer timeout for long texts
       
       const { data, error } = await supabase.functions.invoke(fnName, {
         body: { 
           content, 
-          maxInsights: targetInsights
+          maxInsights: isLongText ? 32 : 24, // More insights for long texts
+          outputScores: false,
+          chunkSize: isLongText ? 2000 : undefined // Add chunking for long texts
         },
       });
-      
-      if (error) {
-        console.error(`❌ ${fnName} error:`, error);
-        throw error;
-      }
-      
-      console.log(`✅ ${fnName} success:`, {
-        insights: data?.insights?.length || 0,
-        criteria: data?.criteria?.length || 0,
-        source: data?.meta?.source
-      });
-      
-      return data;
+      if (error) throw error;
+      return data as any;
     };
 
     let apiData: any = null;
     
-    // Try analyze-assistant first (shorter timeout), then fallback to analyze-openai
+    // First test if functions work at all
     try {
-      console.log('🔄 Trying analyze-assistant (faster method)...');
-      apiData = await tryInvoke('analyze-assistant', 45000);
-      
-      // Check if we got good results
-      if (!apiData?.insights || apiData.insights.length < targetInsights * 0.3) {
-        console.log('⚠️ analyze-assistant returned insufficient insights, trying analyze-openai...');
-        throw new Error('Insufficient insights from assistant');
-      }
-      
-    } catch (assistantError) {
-      console.log('🔄 analyze-assistant failed, trying analyze-openai...', assistantError.message);
+      console.log('Testing simple function...');
+      const { data: testData, error: testError } = await supabase.functions.invoke('test-simple', {
+        body: { test: true },
+      });
+      console.log('test-simple result:', testData, testError);
+    } catch (e) {
+      console.log('test-simple failed:', e);
+    }
+    
+    // Try analyze-assistant first if available, fallback to analyze-openai
+    try {
+      console.log('Trying analyze-assistant...');
+      apiData = await tryInvoke('analyze-assistant');
+      console.log('analyze-assistant succeeded:', apiData);
+    } catch (e) {
+      console.log('analyze-assistant failed, trying analyze-openai...', e);
       try {
-        apiData = await tryInvoke('analyze-openai', 60000);
-      } catch (openaiError) {
-        console.error('❌ Both AI methods failed:', { assistantError: assistantError.message, openaiError: openaiError.message });
-        throw openaiError;
+        apiData = await tryInvoke('analyze-openai');
+        console.log('analyze-openai succeeded:', apiData);
+      } catch (e2) {
+        console.log('analyze-openai also failed:', e2);
+        throw e2;
       }
     }
 
-    const rawInsights: any[] = Array.isArray(apiData?.insights) ? apiData.insights : [];
+    const raw: any[] = Array.isArray(apiData?.insights) ? apiData.insights : [];
     const criteria = Array.isArray(apiData?.criteria) ? apiData.criteria : [];
     const summary = apiData?.summary ?? null;
     const meta = apiData?.meta as AnalysisMeta | undefined;
 
-    console.log(`📊 Processing ${rawInsights.length} raw insights`);
-
-    // Enhanced quote finding with better fuzzy matching
-    const findQuotePosition = (quote: string, originalContent: string): { start: number; end: number } => {
-      if (!quote || !originalContent) return { start: 0, end: 0 };
-      
-      // Try exact match first
-      let pos = originalContent.indexOf(quote);
-      if (pos >= 0) return { start: pos, end: pos + quote.length };
-      
-      // Try trimmed version
-      const trimmed = quote.trim();
-      pos = originalContent.indexOf(trimmed);
-      if (pos >= 0) return { start: pos, end: pos + trimmed.length };
-      
-      // Try normalized version (remove quotes, dashes, etc.)
-      const normalized = quote.replace(/[״״״""''–—−]/g, '"').replace(/\s+/g, ' ').trim();
-      pos = originalContent.indexOf(normalized);
-      if (pos >= 0) return { start: pos, end: pos + normalized.length };
-      
-      // Try first significant words
-      const words = quote.split(/\s+/).filter(w => w.length > 3);
-      if (words.length > 0) {
-        const firstWord = words[0];
-        pos = originalContent.indexOf(firstWord);
-        if (pos >= 0) {
-          return { start: pos, end: Math.min(originalContent.length, pos + quote.length) };
+    // Enhanced normalization helpers (memoized per content)
+    const getNormalized = (() => {
+      let cached: { text: string; map: number[] } | null = null;
+      const isKeep = (ch: string) => /[\p{L}\p{N}]/u.test(ch);
+      const build = () => {
+        const map: number[] = [];
+        let text = '';
+        for (let i = 0; i < content.length; i++) {
+          const ch = content[i];
+          if (isKeep(ch)) {
+            text += ch.toLowerCase();
+            map.push(i);
+          }
         }
-      }
-      
-      return { start: 0, end: 0 };
-    };
+        return { text, map };
+      };
+      return () => (cached ??= build());
+    })();
 
-    // Process insights with better validation
-    const insights: Insight[] = rawInsights.map((i, idx) => {
-      const quote = String(i.quote ?? '').trim();
-      const { start, end } = findQuotePosition(quote, content);
-      
+    const normalize = (s: string) => (s ?? '')
+      .toLowerCase()
+      .replace(/[\u200f\u200e\u202a-\u202e]/g, '') // directionality marks
+      .replace(/[״״״""'']/g, '"') // normalize quotes
+      .replace(/[–—−]/g, '-') // normalize dashes
+      .split('')
+      .filter((ch) => /[\p{L}\p{N}]/u.test(ch))
+      .join('');
+
+    const insights: Insight[] = raw.map((i, idx) => {
+      const quote = String(i.quote ?? '');
+      const clamp = (n: number) => Math.max(0, Math.min(content.length, n));
+
+      const findApprox = (q: string): { start: number; end: number } => {
+        if (!q) return { start: 0, end: 0 };
+        
+        console.log(`🔍 Finding quote: "${q.substring(0, 50)}..."`);
+        
+        // Step 1: Try exact match
+        let pos = content.indexOf(q);
+        if (pos >= 0) {
+          console.log('✅ Exact match found at:', pos);
+          return { start: pos, end: pos + q.length };
+        }
+        
+        // Step 2: Try trimmed version
+        const qt = q.trim();
+        pos = qt ? content.indexOf(qt) : -1;
+        if (pos >= 0) {
+          console.log('✅ Trimmed match found at:', pos);
+          return { start: pos, end: pos + qt.length };
+        }
+        
+        // Step 3: Try without quotes and special punctuation
+        const qClean = qt.replace(/[״״״""'']/g, '"').replace(/[–—−]/g, '-');
+        pos = content.indexOf(qClean);
+        if (pos >= 0) {
+          console.log('✅ Clean match found at:', pos);
+          return { start: pos, end: pos + qClean.length };
+        }
+        
+        // Step 4: Try normalized search (ignore quotes/punctuation/spacing/dir marks)
+        const { text: normContent, map } = getNormalized();
+        const qn = normalize(qt);
+        if (qn.length >= 3) { // Lower threshold for Hebrew
+          const npos = normContent.indexOf(qn);
+          if (npos >= 0) {
+            const startOrig = map[npos] ?? 0;
+            const endOrig = clamp((map[npos + qn.length - 1] ?? startOrig) + 1);
+            console.log('✅ Normalized match found:', { startOrig, endOrig });
+            return { start: startOrig, end: endOrig };
+          }
+        }
+        
+        // Step 5: Try fuzzy search with word boundaries
+        const words = qt.split(/\s+/).filter(w => w.length > 2);
+        if (words.length > 0) {
+          const firstWord = words[0];
+          const firstWordPos = content.indexOf(firstWord);
+          if (firstWordPos >= 0) {
+            // Look for the quote in a reasonable range around the first word
+            const searchStart = Math.max(0, firstWordPos - 100);
+            const searchEnd = Math.min(content.length, firstWordPos + qt.length + 200);
+            const searchRange = content.substring(searchStart, searchEnd);
+            
+            // Try to find a partial match
+            const partialMatch = searchRange.indexOf(qt.substring(0, Math.min(50, qt.length)));
+            if (partialMatch >= 0) {
+              const actualStart = searchStart + partialMatch;
+              const actualEnd = Math.min(content.length, actualStart + qt.length);
+              console.log('✅ Fuzzy match found:', { actualStart, actualEnd });
+              return { start: actualStart, end: actualEnd };
+            }
+          }
+        }
+        
+        // Step 6: Try prefix chunk (helps when the model shortens quotes)
+        const chunk = qt.slice(0, Math.min(30, qt.length));
+        if (chunk.length >= 6) { // Minimum meaningful chunk
+          pos = content.indexOf(chunk);
+          if (pos >= 0) {
+            console.log('✅ Prefix match found at:', pos);
+            return { start: pos, end: clamp(pos + qt.length) };
+          }
+        }
+        
+        console.log('❌ No match found for quote');
+        return { start: 0, end: 0 };
+      };
+
+      let rangeStart = typeof i.rangeStart === 'number' ? clamp(i.rangeStart) : 0;
+      let rangeEnd = typeof i.rangeEnd === 'number' ? clamp(i.rangeEnd) : 0;
+
+      const providedMatches =
+        !!quote &&
+        rangeEnd > rangeStart &&
+        content.slice(rangeStart, rangeEnd) === quote;
+
+      if (!providedMatches) {
+        const approx = findApprox(quote);
+        rangeStart = approx.start;
+        rangeEnd = approx.end;
+      }
+
       return {
         id: String(i.id ?? `ai-${idx}`),
         criterionId: (() => {
-          const id = i.criterionId?.toString().toLowerCase().trim() || '';
-          const validCriteria = Object.keys(CRITERIA_MAP);
-          
-          if (validCriteria.includes(id)) return id;
-          
-          // Try fuzzy matching
-          for (const validId of validCriteria) {
-            if (id.includes(validId) || validId.includes(id)) return validId;
+          const raw = (i.criterionId ?? (i as any).category ?? (i as any).key ?? '')
+            .toString()
+            .toLowerCase()
+            .trim()
+            .replace(/[\u200f\u200e\u202a-\u202e]/g, '')
+            .replace(/[^a-z\u05d0-\u05ea0-9]+/gi, '_')
+            .replace(/^_+|_+$/g, '');
+          const alias: Record<string, string> = {
+            field_implementation: 'field_implementation',
+            'field-implementation': 'field_implementation',
+            fieldimplementation: 'field_implementation',
+            in_field: 'field_implementation',
+            operational_implementation: 'field_implementation',
+            arbitrator: 'arbitrator',
+            arbiter: 'arbitrator',
+            decider: 'arbitrator',
+            decision_maker: 'arbitrator',
+            cross_sector: 'cross_sector',
+            'cross-sector': 'cross_sector',
+            intersectoral: 'cross_sector',
+            multi_sector: 'cross_sector',
+            partnership: 'cross_sector',
+            stakeholder_engagement: 'cross_sector',
+            public_participation: 'cross_sector',
+            outcomes: 'outcomes',
+            outcome_metrics: 'outcomes',
+            success_metrics: 'outcomes',
+            kpis: 'outcomes',
+            results_metrics: 'outcomes',
+          };
+          if (alias[raw]) return alias[raw];
+          if (CRITERIA_MAP[raw as keyof typeof CRITERIA_MAP]) return raw;
+          for (const key of Object.keys(CRITERIA_MAP)) {
+            if (raw.includes(key) || key.includes(raw)) return key;
           }
-          
-          return 'timeline'; // fallback
+          return 'timeline';
         })(),
         quote,
         explanation: String(i.explanation ?? ''),
         suggestion: String(i.suggestion ?? ''),
-        suggestion_primary: String(i.suggestion_primary ?? i.suggestion ?? ''),
+        suggestion_primary: String(i.suggestion_primary ?? ''),
         suggestion_secondary: String(i.suggestion_secondary ?? ''),
-        rangeStart: start,
-        rangeEnd: end,
+        rangeStart,
+        rangeEnd,
+        anchor: i.anchor ? String(i.anchor) : undefined,
         severity: ['minor','moderate','critical'].includes(i?.severity) ? i.severity : undefined,
-        alternatives: Array.isArray(i?.alternatives) 
-          ? i.alternatives.map(String).filter(Boolean)
-          : undefined,
+        alternatives: Array.isArray(i?.alternatives)
+          ? i.alternatives.map((s: any) => String(s)).filter(Boolean)
+          : (typeof i?.alternatives === 'string' && i.alternatives
+              ? String(i.alternatives).split(/;|\u200f|\|/).map((s) => s.trim()).filter(Boolean)
+              : undefined),
+        patchBalanced: i?.patchBalanced ? String(i.patchBalanced) : undefined,
+        patchExtended: i?.patchExtended ? String(i.patchExtended) : undefined,
       } satisfies Insight;
     });
 
-    // Enhanced fallback logic - ensure minimum insights per criterion
-    const getMinInsightsPerCriterion = (totalTarget: number) => Math.max(1, Math.floor(totalTarget / 12));
-    const minPerCriterion = getMinInsightsPerCriterion(targetInsights);
-    
-    const insightsByCriterion = new Map<string, Insight[]>();
-    for (const insight of insights) {
-      const list = insightsByCriterion.get(insight.criterionId) || [];
-      list.push(insight);
-      insightsByCriterion.set(insight.criterionId, list);
-    }
-    
-    // Add fallback insights for criteria with too few insights
-    const fallbackInsights: Insight[] = [];
-    for (const criterion of criteria) {
-      const existing = insightsByCriterion.get(criterion.id) || [];
-      const needed = minPerCriterion - existing.length;
-      
-      if (needed > 0 && criterion.evidence?.length) {
-        for (let i = 0; i < Math.min(needed, criterion.evidence.length); i++) {
-          const evidence = criterion.evidence[i];
-          const suggestions = getDefaultSuggestion(criterion.id);
-          
-          fallbackInsights.push({
-            id: `${criterion.id}-fallback-${i}`,
-            criterionId: criterion.id,
-            quote: evidence.quote || `מתוך הקטע בעמוד ${Math.floor(evidence.rangeStart / 1000) + 1}`,
-            explanation: criterion.justification || `זוהה צורך בשיפור ב${criterion.name}`,
-            suggestion: suggestions.primary,
-            suggestion_primary: suggestions.primary,
-            suggestion_secondary: suggestions.secondary,
-            rangeStart: evidence.rangeStart,
-            rangeEnd: evidence.rangeEnd,
+    // Synthesize insights from criteria evidence when missing for a criterion
+    const getDefaultSuggestion = (id: string) => {
+      const map: Record<string, string> = {
+        timeline: "הוסיפו לוח זמנים מחייב עם תאריכי יעד וסנקציות באי-עמידה.",
+        integrator: "הגדירו צוות מתכלל: הרכב, סמכויות, ותדירות ישיבות.",
+        reporting: "קבעו מנגנון דיווח: תדירות, פורמט וטיוב חריגות.",
+        evaluation: "הוסיפו מדדים ושיטת הערכה המבוצעת באופן מחזורי.",
+        external_audit: "קבעו ביקורת חיצונית, מועד וחובת פרסום.",
+        resources: "פירוט תקציב, מקורות מימון וכוח אדם נדרש.",
+        multi_levels: "הבהירו אחריות בין הדרגים והחלטות תיאום.",
+        structure: "חלקו למשימות/בעלי תפקידים עם אבני דרך ברורות.",
+        field_implementation: "תארו את היישום בשטח: מי, איך, סמכויות ופיקוח.",
+        arbitrator: "מנו גורם מכריע עם SLA לקבלת החלטות.",
+        cross_sector: "שלבו שיתוף ציבור/מגזרים רלוונטיים ותיאום בין-משרדי.",
+        outcomes: "הגדירו מדדי תוצאה ברורים ויעדי הצלחה מספריים."
+      };
+      return map[id] || "שפרו את הסעיף בהתאם לרובריקה.";
+    };
+
+    const existingByCrit = new Set(insights.map((i) => i.criterionId));
+    const synthesized: Insight[] = [];
+    for (const c of criteria) {
+      if (!existingByCrit.has(c.id) && Array.isArray(c.evidence) && c.evidence.length) {
+        for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
+          const e = c.evidence[k];
+          const suggestion = getDefaultSuggestion(c.id);
+          synthesized.push({
+            id: `${c.id}-ev-${k}`,
+            criterionId: c.id,
+            quote: String(e.quote || ''),
+            explanation: c.justification || `חיזוק: ${c.name}`,
+            suggestion,
+            suggestion_primary: suggestion,
+            suggestion_secondary: `הוסיפו מנגנוני בקרה ומעקב נוספים עבור ${c.name}.`,
+            rangeStart: Number.isFinite((e as any).rangeStart) ? (e as any).rangeStart : 0,
+            rangeEnd: Number.isFinite((e as any).rangeEnd) ? (e as any).rangeEnd : 0,
           });
         }
       }
     }
-    
-    const allInsights = [...insights, ...fallbackInsights]
+
+    const allInsights = [...insights, ...synthesized]
       .sort((a, b) => a.rangeStart - b.rangeStart)
-      .slice(0, targetInsights);
+      .slice(0, isLongText ? 32 : 24);
 
-    console.log(`🎯 Final result: ${allInsights.length} insights, ${criteria.length} criteria`);
-    console.log(`📈 Analysis completed with ${meta?.source} in ${meta?.duration || 'unknown time'}`);
+    console.log(`📊 Analysis complete - ${allInsights.length} insights processed`);
     
-    // Add a small delay to show the processing state
-    await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-    
-    return { 
-      insights: allInsights, 
-      criteria, 
-      summary: summary || {
-        feasibilityPercent: criteria.length ? Math.round(criteria.reduce((acc, c) => acc + (c.score / 5 * c.weight), 0) / criteria.reduce((acc, c) => acc + c.weight, 0) * 100) : 50,
-        feasibilityLevel: 'medium' as const,
-        reasoning: 'ניתוח הושלם בהצלחה'
-      }, 
-      meta 
-    };
-    
-  } catch (error) {
-    console.error('🔴 Analysis failed, using local fallback:', error);
+    return { insights: allInsights, criteria, summary, meta };
+  } catch (_err) {
+    console.log('🔄 Falling back to local analysis');
 
-    // Enhanced local fallback
-    const localInsights = createLocalFallbackInsights(content, targetInsights);
-    
-    return { 
-      insights: localInsights, 
-      meta: { source: 'local' },
-      summary: {
-        feasibilityPercent: 30,
-        feasibilityLevel: 'low',
-        reasoning: 'הניתוח האוטומטי נכשל, נוצרו תובנות בסיסיות על בסיס חיפוש מילות מפתח'
+    // Fallback: local heuristic analysis
+    const rules: Array<{ criterionId: keyof typeof CRITERIA_MAP; terms: string[]; expl: string; sug: string }> = [
+      {
+        criterionId: "timeline" as any,
+        terms: ["תאריך", "דד-ליין", "עד", "תוך", "ימים", "שבועות", "חודשים", "לוח זמנים", "מועד"],
+        expl: "נדרש לוודא לוחות זמנים מחייבים ובהירים לביצוע.",
+        sug: "הוסיפו תאריכים מחייבים לכל משימה והגדירו מה קורה באי-עמידה.",
+      },
+      {
+        criterionId: "resources" as any,
+        terms: ["תקציב", "עלות", "מימון", "הוצאה", "ש\"ח", "כספים", "משאבים", "כוח אדם"],
+        expl: "נדרשת הערכה תקציבית מפורטת והגדרת מקורות מימון.",
+        sug: "הוסיפו טבלת עלויות, כוח אדם ומקור תקציבי מאושר.",
+      },
+      {
+        criterionId: "cross_sector" as any,
+        terms: ["ציבור", "בעלי עניין", "עמות", "חברה אזרחית", "משרדים", "רשויות", "שיתוף", "תיאום"],
+        expl: "יש להתחשב בבעלי עניין ובצורך בשיתופי פעולה בין-מגזריים.",
+        sug: "הוסיפו מנגנון שיתוף ציבור ותיאום בין-משרדי/בין-מגזרי מתועד.",
+      },
+    ];
+
+    const insights: Insight[] = [];
+
+    for (const rule of rules) {
+      for (const term of rule.terms) {
+        const positions = pickMatches(content, term);
+        for (const pos of positions) {
+          const start = Math.max(0, pos - 20);
+          const end = Math.min(content.length, pos + term.length + 20);
+          const quote = content.slice(start, end);
+          insights.push({
+            id: `${rule.criterionId}-${pos}`,
+            criterionId: rule.criterionId,
+            quote,
+            explanation: rule.expl,
+            suggestion: rule.sug,
+            rangeStart: pos,
+            rangeEnd: pos + term.length,
+          });
+        }
       }
-    };
+    }
+
+    insights.sort((a, b) => a.rangeStart - b.rangeStart);
+    return { insights, meta: { source: 'local' } };
   }
-}
-
-function getDefaultSuggestion(criterionId: string): { primary: string; secondary: string } {
-  const suggestions: Record<string, { primary: string; secondary: string }> = {
-    timeline: {
-      primary: "הוסיפו לוח זמנים מחייב עם תאריכי יעד ברורים וסנקציות באי-עמידה.",
-      secondary: "צרו מערכת מעקב ודיווח שבועית על התקדמות מול הלוח זמנים."
-    },
-    integrator: {
-      primary: "הגדירו צוות מתכלל עם הרכב מוגדר וסמכויות ברורות.",
-      secondary: "קבעו נהלים ברורים לתיאום בין-משרדי וגורמים שונים."
-    },
-    reporting: {
-      primary: "קבעו מנגנון דיווח סדיר עם תדירות קבועה ופורמט סטנדרטי.",
-      secondary: "הקימו מערכת מחוונים דיגיטלית למעקב בזמן אמת."
-    },
-    evaluation: {
-      primary: "הוסיפו מדדים כמותיים ואיכותיים ברורים ושיטת הערכה מחזורית.",
-      secondary: "קבעו גורם חיצוני עצמאי להערכת השפעה ויעילות."
-    },
-    external_audit: {
-      primary: "קבעו ביקורת חיצונית עצמאית עם מועדים קבועים וחובת פרסום ממצאים.",
-      secondary: "הגדירו נהלי טיפול בממצאי הביקורת ומעקב אחר יישום המלצות."
-    },
-    resources: {
-      primary: "פרטו את התקציב הנדרש לפי שנים ופעילויות ומקורות המימון.",
-      secondary: "קבעו מנגנון בקרת תקציב שוטף עם רזרבות לחריגות עלות."
-    },
-    multi_levels: {
-      primary: "הבהירו את חלוקת האחריות והסמכויות בין הדרגים השונים.",
-      secondary: "צרו מערכת תקשורת ודיווח היררכית בין הרמות השונות."
-    },
-    structure: {
-      primary: "חלקו את התוכנית למשימות ספציפיות עם בעלי תפקידים מוגדרים.",
-      secondary: "הגדירו מבנה ארגוני היררכי עם תיאורי תפקידים מפורטים."
-    },
-    field_implementation: {
-      primary: "תארו בפירוט את היישום בשטח: מי מבצע, איך, באילו סמכויות.",
-      secondary: "הקימו מערכת הכשרה והדרכה למבצעים בשטח עם כלים מעשיים."
-    },
-    arbitrator: {
-      primary: "מנו גורם מכריע בכיר עם זמן תגובה ברור לקבלת החלטות.",
-      secondary: "הגדירו נהלי הסלמה מדורגים וקבלת החלטות במקרים מורכבים."
-    },
-    cross_sector: {
-      primary: "שלבו מנגנון שיתוף פעולה עם ציבור ובעלי עניין רלוונטיים.",
-      secondary: "צרו ועדת היגוי רב-גזרית עם נציגות רחבה מכל הגורמים הרלוונטיים."
-    },
-    outcomes: {
-      primary: "הגדירו מדדי תוצאה ברורים ויעדי הצלחה מספריים הניתנים למדידה.",
-      secondary: "קבעו מערכת מעקב אחר השפעה ארוכת טווח עם הערכה תקופתית."
-    }
-  };
-
-  return suggestions[criterionId] || {
-    primary: "שפרו את הסעיף בהתאם לדרישות הרובריקה עם פירוט נוסף.",
-    secondary: "הוסיפו מנגנוני בקרה ומעקב מתאימים לשיפור הביצוע."
-  };
-}
-
-function createLocalFallbackInsights(content: string, targetCount: number): Insight[] {
-  const rules = [
-    {
-      criterionId: "timeline" as keyof typeof CRITERIA_MAP,
-      terms: ["תאריך", "דד-ליין", "לוח זמנים", "מועד", "עד יום", "תוך"],
-      explanation: "נדרש לוודא לוחות זמנים מחייבים ובהירים לביצוע."
-    },
-    {
-      criterionId: "resources" as keyof typeof CRITERIA_MAP,
-      terms: ["תקציב", "עלות", "מימון", "ש\"ח", "כספים", "משאבים"],
-      explanation: "נדרשת הערכה תקציבית מפורטת והגדרת מקורות מימון."
-    },
-    {
-      criterionId: "cross_sector" as keyof typeof CRITERIA_MAP,
-      terms: ["ציבור", "בעלי עניין", "עמותות", "שיתוף", "תיאום", "משרדים"],
-      explanation: "יש להתחשב בבעלי עניין ובצורך בשיתופי פעולה בין-מגזריים."
-    }
-  ];
-
-  const insights: Insight[] = [];
-  
-  for (const rule of rules) {
-    for (const term of rule.terms) {
-      let startIndex = 0;
-      while (insights.length < targetCount) {
-        const pos = content.indexOf(term, startIndex);
-        if (pos === -1) break;
-        
-        const start = Math.max(0, pos - 30);
-        const end = Math.min(content.length, pos + term.length + 30);
-        const quote = content.slice(start, end).trim();
-        const suggestions = getDefaultSuggestion(rule.criterionId);
-        
-        insights.push({
-          id: `local-${rule.criterionId}-${pos}`,
-          criterionId: rule.criterionId,
-          quote,
-          explanation: rule.explanation,
-          suggestion: suggestions.primary,
-          suggestion_primary: suggestions.primary,
-          suggestion_secondary: suggestions.secondary,
-          rangeStart: pos,
-          rangeEnd: pos + term.length,
-        });
-        
-        startIndex = pos + term.length;
-        if (insights.length >= targetCount) break;
-      }
-      if (insights.length >= targetCount) break;
-    }
-    if (insights.length >= targetCount) break;
-  }
-
-  return insights.slice(0, targetCount);
 }
