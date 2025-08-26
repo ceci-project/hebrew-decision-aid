@@ -351,7 +351,13 @@ const EditorPage = () => {
                   <CriterionAccordion 
                     criteriaData={criteria} 
                     insights={insights.filter(i => !i.isStale)} 
-                    onJump={(insight) => setSelectedInsight(insight)} 
+                    onJump={(insight) => {
+                      setSelectedInsight(insight);
+                      // Scroll to insight in text
+                      window.dispatchEvent(new CustomEvent('jumpToInsight', { 
+                        detail: { insight } 
+                      }));
+                    }} 
                   />
                 </div>
               </div>
