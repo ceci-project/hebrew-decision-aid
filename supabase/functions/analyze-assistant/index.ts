@@ -1,7 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const VERSION = "AssistantPath v2025-08-26-Enhanced-60s-Timeout";
+const VERSION = "AssistantPath v2025-08-26-Fixed-Content-Issue";
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
 const assistantId = Deno.env.get('ASSISTANT_ID');
@@ -62,12 +62,12 @@ serve(async (req) => {
     // Enhanced content handling for long texts
     const isLongText = content.length > 4000;
     const adjustedMaxInsights = isLongText ? Math.max(maxInsights, 32) : maxInsights;
-    const truncatedContent = content.length > 15000 ? content.substring(0, 15000) + "..." : content; // Increased limit
+    const truncatedContent = content.length > 15000 ? content.substring(0, 15000) + "..." : content;
     console.log(`📝 ${VERSION} - Content prepared: originalLength=${content.length}, isLongText=${isLongText}, adjustedMaxInsights=${adjustedMaxInsights}, truncatedLength=${truncatedContent.length}`);
 
-    // Enhanced timeout for long texts - increased to 60 seconds
-    const timeoutDuration = isLongText ? 60000 : 30000; // 60s for long texts, 30s for normal
-    const maxPollingAttempts = isLongText ? 30 : 15; // 30 attempts for long texts (60s total)
+    // Enhanced timeout for long texts - 60 seconds
+    const timeoutDuration = isLongText ? 60000 : 30000;
+    const maxPollingAttempts = isLongText ? 30 : 15;
     
     // Create AbortController for timeout
     const controller = new AbortController();
@@ -76,7 +76,7 @@ serve(async (req) => {
     try {
       console.log(`🔄 ${VERSION} - Step 1: Creating thread with timeout ${timeoutDuration}ms`);
       
-      // Prepare headers - don't include OpenAI-Organization header to avoid the mismatch error
+      // Prepare headers
       const headers: Record<string, string> = {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
@@ -103,75 +103,38 @@ serve(async (req) => {
       const threadId = thread.id;
       console.log(`✅ ${VERSION} - Thread created: ${threadId}`);
 
-      // Enhanced prompt for better Hebrew processing and comprehensive text analysis
-      const enhancedPrompt = `נתח את המסמך הממשלתי הבא ותן ביקורת מקיפה על פי רובריקת 12 הקריטריונים.
+      // FIXED: Clear and explicit prompt with the actual content
+      const fixedPrompt = `אתה עוזר מומחה לניתוח החלטות ממשלתיות בעברית. נתח את הטקסט הבא ותחזיר JSON עם התוצאות.
 
-🔥 הנחיות קריטיות - קרא בקפידה והקפד על יישומן:
+🎯 חשוב: נתח את הטקסט המלא הבא באופן מקיף ומפורט!
 
-1. **ניתוח מלא ומקיף של כל הטקסט**: 
-   - נתח את כל חלקי המסמך מתחילתו ועד סופו - זה חובה!
-   - וודא שהתובנות מפוזרות על פני כל הטקסט (תחילה 30%, אמצע 40%, סוף 30%)
-   - אל תתעלם מהחלקים האחרונים של המסמך - הם לעיתים מכילים פרטים חשובים
-   - ${isLongText ? 'טקסט זה ארוך במיוחד - חובה לנתח גם את החלקים המאוחרים!' : ''}
+דרישות:
+1. צור בדיוק ${adjustedMaxInsights} תובנות (insights) מפורטות
+2. נתח את כל הטקסט מתחילתו ועד סופו - אל תדלג על חלקים!
+3. חזר JSON בלבד ללא טקסט נוסף
+4. כל הטקסט חייב להיות בעברית בלבד
+5. ציטוטים קצרים ומדויקים (20-50 תווים)
 
-2. **כמות התובנות נדרשת**: צור בדיוק ${adjustedMaxInsights} תובנות מפורטות
-   - ${isLongText ? 'עבור טקסט ארוך זה, חובה למצוא תובנות גם מהחלק האחרון של המסמך' : ''}
-   - חלק את התובנות באופן שווה בין הקריטריונים השונים
-   - כל קריטריון חייב לקבל לפחות 2-3 תובנות
-
-3. **ציטוטים מדויקים ברמה גבוהה**:
-   - השתמש בציטוטים קצרים ומדויקים (20-50 תווים בלבד)
-   - ציטוט חייב להופיע בדיוק במסמך כפי שאתה מציין
-   - הימנע מרווחים מיותרים בתחילת או סוף הציטוט
-   - ודא שה-rangeStart וה-rangeEnd מדויקים לחלוטין
-
-4. **עברית בלבד**: כל התוכן חייב להיות בעברית מושלמת ברמה אקדמית!
-
-5. **התמחות בטקסט ממשלתי עברי**:
-   - זהה מונחים מקצועיים ממשלתיים
-   - התמקד בחסרים מבניים ותהליכיים
-   - זהה בעיות בהגדרת אחריות וסמכויות
-   - התייחס לחוסר בלוחות זמנים ומנגנוני פיקוח
-
-עבור כל insight, כלול:
-- explanation: הסבר ברור ומדויק של הבעיה או החוזקה (30-50 מילים בעברית)
-- suggestion: הצעה קצרה לשיפור (15-25 מילים בעברית)  
-- suggestion_primary: הצעה מפורטת ראשונית (50-80 מילים בעברית)
-- suggestion_secondary: הצעה חלופית או משלימה (50-80 מילים בעברית)
-- quote: ציטוט קצר ומדויק מהמסמך (20-50 תווים)
-- rangeStart, rangeEnd: מיקום מדויק של הציטוט בטקסט
-
-${isLongText ? `
-⚠️ טקסט ארוך - הנחיות נוספות חובה:
-- פזר תובנות על פני כל הטקסט: תחילה (30%), אמצע (40%), סוף (30%)
-- חובה לנתח גם את החלקים המאוחרים של המסמך
-- תן דגש מיוחד לחלק הסופי שלעיתים מכיל פרטי יישום חשובים
-- השתמש בציטוטים מייצגים ממקטעים שונים לאורך כל הטקסט
-- וודא שיש לך תובנות מכל הקריטריונים גם מהחלק הסופי
-` : ''}
-
-תוכן המסמך לניתוח:
+הטקסט לניתוח:
 """
 ${truncatedContent}
 """
 
-החזר רק JSON עם המבנה הבא (ללא טקסט נוסף):
+החזר JSON במבנה הבא:
 {
-  "criteria": [12 קריטריונים עם id, name (בעברית), weight, score, justification (בעברית), evidence],
-  "summary": { "feasibilityPercent": מספר, "feasibilityLevel": "low/medium/high", "reasoning": "הסבר בעברית" },
-  "insights": [${adjustedMaxInsights} תובנות עם id, criterionId, quote, explanation (בעברית), suggestion (בעברית), suggestion_primary (בעברית), suggestion_secondary (בעברית), rangeStart, rangeEnd]
-}
-
-זכור: כל הטקסט בעברית, ${adjustedMaxInsights} תובנות בדיוק, ציטוטים מדויקים וקצרים, כיסוי מלא של הטקסט מתחילתו ועד סופו!`;
+  "criteria": [12 קריטריונים עם id, name, weight, score, justification, evidence],
+  "summary": {"feasibilityPercent": מספר, "feasibilityLevel": "low/medium/high", "reasoning": "הסבר"},
+  "insights": [${adjustedMaxInsights} תובנות עם id, criterionId, quote, explanation, suggestion, suggestion_primary, suggestion_secondary, rangeStart, rangeEnd]
+}`;
 
       // Step 2: Add a message to the thread
-      console.log(`🔄 ${VERSION} - Step 2: Adding enhanced message to thread`);
+      console.log(`🔄 ${VERSION} - Step 2: Adding fixed message to thread`);
       const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           role: 'user',
-          content: enhancedPrompt,
+          content: fixedPrompt,
         }),
         signal: controller.signal,
       });
@@ -182,7 +145,7 @@ ${truncatedContent}
         throw new Error(`Failed to create message: ${messageError.error?.message || 'Unknown error'}`);
       }
 
-      console.log(`✅ ${VERSION} - Enhanced message added to thread`);
+      console.log(`✅ ${VERSION} - Fixed message added to thread`);
 
       // Step 3: Run the assistant
       console.log(`🔄 ${VERSION} - Step 3: Running assistant ${assistantId}`);
@@ -212,7 +175,7 @@ ${truncatedContent}
       let attempts = 0;
 
       while (['queued', 'in_progress'].includes(runStatus) && attempts < maxPollingAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+        await new Promise(resolve => setTimeout(resolve, 2000));
         attempts++;
         const progressPercent = Math.round((attempts / maxPollingAttempts) * 100);
         console.log(`🔄 ${VERSION} - Polling attempt ${attempts}/${maxPollingAttempts} (${progressPercent}%), current status: ${runStatus}`);
@@ -270,7 +233,7 @@ ${truncatedContent}
       const responseText = assistantMessage.content[0].text.value;
       console.log(`📄 ${VERSION} - Response received, length: ${responseText.length}`);
 
-      // Enhanced JSON parsing with multiple extraction methods
+      // Enhanced JSON parsing
       let parsed: any;
       try {
         let jsonText = responseText.trim();
@@ -292,16 +255,14 @@ ${truncatedContent}
       } catch (parseError) {
         console.error(`❌ ${VERSION} - JSON parse failed:`, parseError);
         console.error(`Raw response (first 500 chars):`, responseText.substring(0, 500));
-        // Enhanced fallback structure
         parsed = { insights: [], criteria: [], summary: null };
       }
 
-      // Enhanced processing and validation
       let insights = Array.isArray(parsed.insights)
         ? parsed.insights.slice(0, adjustedMaxInsights).map((i: any, idx: number) => ({
             id: String(i?.id ?? `assistant-${idx}`),
             criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
-            quote: String(i?.quote ?? '').trim(), // Trim whitespace from quotes
+            quote: String(i?.quote ?? '').trim(),
             explanation: String(i?.explanation ?? ''),
             suggestion: String(i?.suggestion ?? ''),
             suggestion_primary: String(i?.suggestion_primary ?? i?.suggestion ?? ''),
@@ -319,7 +280,7 @@ ${truncatedContent}
             score: Math.max(0, Math.min(5, Number(c?.score) || 0)),
             justification: String(c?.justification ?? ''),
             evidence: Array.isArray(c?.evidence) ? c.evidence.map((e: any) => ({
-              quote: String(e?.quote ?? '').trim(), // Trim evidence quotes too
+              quote: String(e?.quote ?? '').trim(),
               rangeStart: Number.isFinite(e?.rangeStart) ? e.rangeStart : 0,
               rangeEnd: Number.isFinite(e?.rangeEnd) ? e.rangeEnd : 0,
             })) : [],
@@ -334,7 +295,7 @@ ${truncatedContent}
         
         for (const c of criteria) {
           if (Array.isArray(c.evidence) && c.evidence.length) {
-            const evidenceToUse = existingByCrit.has(c.id) ? 1 : Math.min(c.evidence.length, 3); // More evidence per criterion
+            const evidenceToUse = existingByCrit.has(c.id) ? 1 : Math.min(c.evidence.length, 3);
             for (let k = 0; k < evidenceToUse; k++) {
               const e = c.evidence[k];
               const defaultSuggestions = getDefaultSuggestions(c.id);
