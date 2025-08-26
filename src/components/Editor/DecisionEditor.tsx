@@ -103,6 +103,53 @@ export const DecisionEditor: React.FC<Props> = ({
     }
   }, []);
 
+  // Handle custom selectInsight event
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const handleSelectInsight = (event: CustomEvent) => {
+      const { insight, rangeStart, rangeEnd } = event.detail;
+      console.log('🎯 DecisionEditor - Received selectInsight event:', { rangeStart, rangeEnd });
+      
+      // Select the text range
+      selectTextRange(editor, rangeStart, rangeEnd);
+      
+      // Scroll to the range
+      setTimeout(() => {
+        const range = document.createRange();
+        const startNode = getTextNodeAtOffset(editor, rangeStart);
+        const endNode = getTextNodeAtOffset(editor, rangeEnd);
+        
+        if (startNode && endNode) {
+          try {
+            range.setStart(startNode.node, startNode.offset);
+            range.setEnd(endNode.node, endNode.offset);
+            
+            const rect = range.getBoundingClientRect();
+            const editorRect = editor.getBoundingClientRect();
+            
+            // Scroll to center the text
+            if (rect.top < editorRect.top || rect.bottom > editorRect.bottom) {
+              editor.scrollTo({
+                top: editor.scrollTop + (rect.top - editorRect.top) - (editorRect.height / 2),
+                behavior: 'smooth'
+              });
+            }
+          } catch (error) {
+            console.warn('Error scrolling to insight:', error);
+          }
+        }
+      }, 100);
+    };
+
+    editor.addEventListener('selectInsight', handleSelectInsight as EventListener);
+    
+    return () => {
+      editor.removeEventListener('selectInsight', handleSelectInsight as EventListener);
+    };
+  }, []);
+
   // Debounced update function
   const debouncedUpdate = useCallback((newContent: string) => {
     if (updateTimeoutRef.current) {
@@ -218,6 +265,7 @@ export const DecisionEditor: React.FC<Props> = ({
                 border: 1px solid hsl(var(${criterion.colorVar}) / 0.4);
                 z-index: 1;
                 pointer-events: auto;
+                cursor: pointer;
               `;
               
               highlight.addEventListener('click', (e) => {
@@ -286,6 +334,8 @@ export const DecisionEditor: React.FC<Props> = ({
         
         selection?.removeAllRanges();
         selection?.addRange(range);
+        
+        console.log('🎯 Text selected:', { start, end, selectedText: range.toString() });
       } catch (error) {
         console.warn('Error selecting text range:', error);
       }

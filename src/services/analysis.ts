@@ -1,3 +1,4 @@
+
 import { Insight } from "@/types/models";
 import { CRITERIA_MAP } from "@/data/criteria";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,11 +42,23 @@ export interface AnalysisResult {
 
 export async function analyzeDocument(content: string): Promise<AnalysisResult> {
   if (!content || !content.trim()) return { insights: [], meta: { source: 'local' } };
+  
+  // Enhanced preprocessing for long texts
+  const isLongText = content.length > 4000;
+  console.log(`📏 Analysis - Text length: ${content.length}, isLong: ${isLongText}`);
+  
   // Try server-side AI first (Assistants), then fallback to OpenAI function
   try {
     const tryInvoke = async (fnName: string) => {
+      const requestTimeout = isLongText ? 45000 : 30000; // Longer timeout for long texts
+      
       const { data, error } = await supabase.functions.invoke(fnName, {
-        body: { content, maxInsights: 24, outputScores: false },
+        body: { 
+          content, 
+          maxInsights: isLongText ? 32 : 24, // More insights for long texts
+          outputScores: false,
+          chunkSize: isLongText ? 2000 : undefined // Add chunking for long texts
+        },
       });
       if (error) throw error;
       return data as any;
@@ -85,7 +98,7 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
     const summary = apiData?.summary ?? null;
     const meta = apiData?.meta as AnalysisMeta | undefined;
 
-    // Robust normalization helpers (memoized per content)
+    // Enhanced normalization helpers (memoized per content)
     const getNormalized = (() => {
       let cached: { text: string; map: number[] } | null = null;
       const isKeep = (ch: string) => /[\p{L}\p{N}]/u.test(ch);
@@ -107,6 +120,8 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
     const normalize = (s: string) => (s ?? '')
       .toLowerCase()
       .replace(/[\u200f\u200e\u202a-\u202e]/g, '') // directionality marks
+      .replace(/[״״״""'']/g, '"') // normalize quotes
+      .replace(/[–—−]/g, '-') // normalize dashes
       .split('')
       .filter((ch) => /[\p{L}\p{N}]/u.test(ch))
       .join('');
@@ -117,30 +132,78 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
 
       const findApprox = (q: string): { start: number; end: number } => {
         if (!q) return { start: 0, end: 0 };
-        // exact
+        
+        console.log(`🔍 Finding quote: "${q.substring(0, 50)}..."`);
+        
+        // Step 1: Try exact match
         let pos = content.indexOf(q);
-        if (pos >= 0) return { start: pos, end: pos + q.length };
-        // trimmed
+        if (pos >= 0) {
+          console.log('✅ Exact match found at:', pos);
+          return { start: pos, end: pos + q.length };
+        }
+        
+        // Step 2: Try trimmed version
         const qt = q.trim();
         pos = qt ? content.indexOf(qt) : -1;
-        if (pos >= 0) return { start: pos, end: pos + qt.length };
-        // normalized (ignore quotes/punctuation/spacing/dir marks)
+        if (pos >= 0) {
+          console.log('✅ Trimmed match found at:', pos);
+          return { start: pos, end: pos + qt.length };
+        }
+        
+        // Step 3: Try without quotes and special punctuation
+        const qClean = qt.replace(/[״״״""'']/g, '"').replace(/[–—−]/g, '-');
+        pos = content.indexOf(qClean);
+        if (pos >= 0) {
+          console.log('✅ Clean match found at:', pos);
+          return { start: pos, end: pos + qClean.length };
+        }
+        
+        // Step 4: Try normalized search (ignore quotes/punctuation/spacing/dir marks)
         const { text: normContent, map } = getNormalized();
         const qn = normalize(qt);
-        if (qn.length >= 2) {
+        if (qn.length >= 3) { // Lower threshold for Hebrew
           const npos = normContent.indexOf(qn);
           if (npos >= 0) {
             const startOrig = map[npos] ?? 0;
             const endOrig = clamp((map[npos + qn.length - 1] ?? startOrig) + 1);
+            console.log('✅ Normalized match found:', { startOrig, endOrig });
             return { start: startOrig, end: endOrig };
           }
         }
-        // prefix chunk (helps when the model shortens quotes)
-        const chunk = qt.slice(0, Math.min(24, qt.length));
-        if (chunk.length >= 4) {
-          pos = content.indexOf(chunk);
-          if (pos >= 0) return { start: pos, end: clamp(pos + qt.length) };
+        
+        // Step 5: Try fuzzy search with word boundaries
+        const words = qt.split(/\s+/).filter(w => w.length > 2);
+        if (words.length > 0) {
+          const firstWord = words[0];
+          const firstWordPos = content.indexOf(firstWord);
+          if (firstWordPos >= 0) {
+            // Look for the quote in a reasonable range around the first word
+            const searchStart = Math.max(0, firstWordPos - 100);
+            const searchEnd = Math.min(content.length, firstWordPos + qt.length + 200);
+            const searchRange = content.substring(searchStart, searchEnd);
+            
+            // Try to find a partial match
+            const partialMatch = searchRange.indexOf(qt.substring(0, Math.min(50, qt.length)));
+            if (partialMatch >= 0) {
+              const actualStart = searchStart + partialMatch;
+              const actualEnd = Math.min(content.length, actualStart + qt.length);
+              console.log('✅ Fuzzy match found:', { actualStart, actualEnd });
+              return { start: actualStart, end: actualEnd };
+            }
+          }
         }
+        
+        // Step 6: Try prefix chunk (helps when the model shortens quotes)
+        const chunk = qt.slice(0, Math.min(30, qt.length));
+        if (chunk.length >= 6) { // Minimum meaningful chunk
+          pos = content.indexOf(chunk);
+          if (pos >= 0) {
+            console.log('✅ Prefix match found at:', pos);
+            return { start: pos, end: clamp(pos + qt.length) };
+          }
+        }
+        
+        console.log('❌ No match found for quote');
         return { start: 0, end: 0 };
       };
 
@@ -260,28 +323,31 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
 
     const allInsights = [...insights, ...synthesized]
       .sort((a, b) => a.rangeStart - b.rangeStart)
-      .slice(0, 24);
+      .slice(0, isLongText ? 32 : 24);
 
+    console.log(`📊 Analysis complete - ${allInsights.length} insights processed`);
+    
     return { insights: allInsights, criteria, summary, meta };
   } catch (_err) {
+    console.log('🔄 Falling back to local analysis');
 
     // Fallback: local heuristic analysis
     const rules: Array<{ criterionId: keyof typeof CRITERIA_MAP; terms: string[]; expl: string; sug: string }> = [
       {
         criterionId: "timeline" as any,
-        terms: ["תאריך", "דד-ליין", "עד", "תוך", "ימים", "שבועות", "חודשים"],
+        terms: ["תאריך", "דד-ליין", "עד", "תוך", "ימים", "שבועות", "חודשים", "לוח זמנים", "מועד"],
         expl: "נדרש לוודא לוחות זמנים מחייבים ובהירים לביצוע.",
         sug: "הוסיפו תאריכים מחייבים לכל משימה והגדירו מה קורה באי-עמידה.",
       },
       {
         criterionId: "resources" as any,
-        terms: ["תקציב", "עלות", "מימון", "הוצאה", "ש\"ח", "כספים"],
+        terms: ["תקציב", "עלות", "מימון", "הוצאה", "ש\"ח", "כספים", "משאבים", "כוח אדם"],
         expl: "נדרשת הערכה תקציבית מפורטת והגדרת מקורות מימון.",
         sug: "הוסיפו טבלת עלויות, כוח אדם ומקור תקציבי מאושר.",
       },
       {
         criterionId: "cross_sector" as any,
-        terms: ["ציבור", "בעלי עניין", "עמות", "חברה אזרחית", "משרדים", "רשויות", "שיתוף"],
+        terms: ["ציבור", "בעלי עניין", "עמות", "חברה אזרחית", "משרדים", "רשויות", "שיתוף", "תיאום"],
         expl: "יש להתחשב בבעלי עניין ובצורך בשיתופי פעולה בין-מגזריים.",
         sug: "הוסיפו מנגנון שיתוף ציבור ותיאום בין-משרדי/בין-מגזרי מתועד.",
       },

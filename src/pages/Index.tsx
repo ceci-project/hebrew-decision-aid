@@ -143,6 +143,44 @@ const Index = () => {
 
   const handleInsightClick = (insight: Insight) => {
     setSelectedInsight(insight);
+    
+    // Scroll to and highlight the text in the editor
+    if (showAnalysis && insight.rangeStart !== undefined && insight.rangeEnd !== undefined) {
+      // Find the editor element
+      const editorElement = document.querySelector('[contenteditable="true"]') as HTMLElement;
+      if (editorElement) {
+        // Create a temporary range to find the position
+        const textContent = editorElement.textContent || '';
+        if (insight.rangeStart < textContent.length) {
+          // Use the DecisionEditor's built-in selection functionality
+          setTimeout(() => {
+            // Trigger a custom event to tell the editor to select this range
+            const event = new CustomEvent('selectInsight', {
+              detail: { 
+                insight,
+                rangeStart: insight.rangeStart,
+                rangeEnd: insight.rangeEnd
+              }
+            });
+            editorElement.dispatchEvent(event);
+            
+            // Scroll the editor into view
+            editorElement.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'center' 
+            });
+          }, 100);
+        }
+      }
+    }
+    
+    console.log(`🔍 ${UI_VERSION} - Insight clicked:`, {
+      id: insight.id,
+      criterionId: insight.criterionId,
+      quote: insight.quote?.substring(0, 50) + '...',
+      rangeStart: insight.rangeStart,
+      rangeEnd: insight.rangeEnd,
+    });
   };
 
   const handleContentChange = (newContent: string) => {
