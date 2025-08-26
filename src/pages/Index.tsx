@@ -1,4 +1,3 @@
-
 import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,7 @@ import type { AnalysisMeta } from "@/services/analysis";
 import CriterionAccordion from "@/components/Editor/CriterionAccordion";
 import DecisionEditor from "@/components/Editor/DecisionEditor";
 import InsightDetailPanel from "@/components/Editor/InsightDetailPanel";
+import FindingsPanel from "@/components/Editor/FindingsPanel";
 
 const Index = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -332,14 +332,7 @@ const Index = () => {
               {/* Analysis Results */}
               {showAnalysis && criteria.length > 0 && (
                 <div className="border-t border-gray-200 pt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">ניתוח לפי קריטריונים</h3>
-                    {insights.length > 0 && (
-                      <span className="text-sm text-gray-500">{insights.length} ממצאים</span>
-                    )}
-                  </div>
-                  
-                  <CriterionAccordion 
+                  <FindingsPanel 
                     criteriaData={criteria} 
                     insights={insights} 
                     onJump={handleInsightClick} 

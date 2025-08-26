@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Insight } from '@/types/models';
 import { CRITERIA_MAP } from '@/data/criteria';
 import { AnchorManager } from '@/services/anchorManager';
+import { UndoRedoManager } from '@/services/undoRedoManager';
 
 interface Props {
   content: string;
@@ -31,7 +32,76 @@ export const DecisionEditor: React.FC<Props> = ({
   const editorRef = useRef<HTMLDivElement>(null);
   const [highlightSpans, setHighlightSpans] = useState<HighlightSpan[]>([]);
   const [isComposing, setIsComposing] = useState(false);
+  const [undoRedoManager] = useState(() => new UndoRedoManager());
   const updateTimeoutRef = useRef<NodeJS.Timeout>();
+  const lastCaretPositionRef = useRef<number>(0);
+
+  // Save cursor position before updates
+  const saveCursorPosition = useCallback(() => {
+    if (!editorRef.current) return;
+    
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      let offset = 0;
+      
+      const walker = document.createTreeWalker(
+        editorRef.current,
+        NodeFilter.SHOW_TEXT,
+        null
+      );
+      
+      let node = walker.nextNode();
+      while (node && node !== range.startContainer) {
+        offset += node.textContent?.length || 0;
+        node = walker.nextNode();
+      }
+      
+      if (node === range.startContainer) {
+        offset += range.startOffset;
+      }
+      
+      lastCaretPositionRef.current = offset;
+    }
+  }, []);
+
+  // Restore cursor position after updates
+  const restoreCursorPosition = useCallback(() => {
+    if (!editorRef.current) return;
+    
+    const targetOffset = lastCaretPositionRef.current;
+    let currentOffset = 0;
+    
+    const walker = document.createTreeWalker(
+      editorRef.current,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    let node = walker.nextNode() as Text;
+    while (node) {
+      const nodeLength = node.textContent?.length || 0;
+      
+      if (currentOffset + nodeLength >= targetOffset) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        
+        try {
+          range.setStart(node, Math.min(targetOffset - currentOffset, nodeLength));
+          range.collapse(true);
+          
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        } catch (error) {
+          console.warn('Error restoring cursor position:', error);
+        }
+        break;
+      }
+      
+      currentOffset += nodeLength;
+      node = walker.nextNode() as Text;
+    }
+  }, []);
 
   // Debounced update function
   const debouncedUpdate = useCallback((newContent: string) => {
@@ -41,12 +111,15 @@ export const DecisionEditor: React.FC<Props> = ({
     
     updateTimeoutRef.current = setTimeout(() => {
       onContentChange(newContent);
+      undoRedoManager.saveState(newContent);
     }, 200);
-  }, [onContentChange]);
+  }, [onContentChange, undoRedoManager]);
 
   // Handle text changes
   const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
     if (isComposing) return;
+    
+    saveCursorPosition();
     
     const newContent = e.currentTarget.textContent || '';
     
@@ -57,9 +130,36 @@ export const DecisionEditor: React.FC<Props> = ({
     
     onInsightsChange(updatedInsights);
     debouncedUpdate(newContent);
-  }, [insights, onInsightsChange, debouncedUpdate, isComposing]);
+  }, [insights, onInsightsChange, debouncedUpdate, isComposing, saveCursorPosition]);
 
-  // Render highlights over the text
+  // Handle undo/redo
+  const handleUndo = useCallback(() => {
+    const previousContent = undoRedoManager.undo();
+    if (previousContent !== null) {
+      onContentChange(previousContent);
+      
+      // Update insights for the restored content
+      const updatedInsights = insights.map(insight => 
+        AnchorManager.enhanceInsightWithAnchors(insight, previousContent)
+      );
+      onInsightsChange(updatedInsights);
+    }
+  }, [undoRedoManager, onContentChange, insights, onInsightsChange]);
+
+  const handleRedo = useCallback(() => {
+    const nextContent = undoRedoManager.redo();
+    if (nextContent !== null) {
+      onContentChange(nextContent);
+      
+      // Update insights for the restored content
+      const updatedInsights = insights.map(insight => 
+        AnchorManager.enhanceInsightWithAnchors(insight, nextContent)
+      );
+      onInsightsChange(updatedInsights);
+    }
+  }, [undoRedoManager, onContentChange, insights, onInsightsChange]);
+
+  // Render highlights with better performance
   const renderHighlights = useCallback(() => {
     if (!editorRef.current) return;
 
@@ -87,52 +187,58 @@ export const DecisionEditor: React.FC<Props> = ({
 
     setHighlightSpans(spans);
     
-    // Apply visual highlights using CSS positioning
-    spans.forEach(span => {
-      const range = document.createRange();
-      const textNode = getTextNodeAtOffset(editor, span.start);
-      const endTextNode = getTextNodeAtOffset(editor, span.end);
-      
-      if (textNode && endTextNode) {
-        try {
-          range.setStart(textNode.node, textNode.offset);
-          range.setEnd(endTextNode.node, endTextNode.offset);
-          
-          const rect = range.getBoundingClientRect();
-          const editorRect = editor.getBoundingClientRect();
-          
-          if (rect.width > 0 && rect.height > 0) {
-            const highlight = document.createElement('div');
-            highlight.className = `insight-highlight absolute pointer-events-none rounded-sm transition-all duration-200 ${
-              selectedInsight?.id === span.insight.id ? 'ring-2 ring-primary/50' : ''
-            }`;
+    // Apply visual highlights using CSS positioning with improved performance
+    requestAnimationFrame(() => {
+      spans.forEach(span => {
+        const range = document.createRange();
+        const textNode = getTextNodeAtOffset(editor, span.start);
+        const endTextNode = getTextNodeAtOffset(editor, span.end);
+        
+        if (textNode && endTextNode) {
+          try {
+            range.setStart(textNode.node, textNode.offset);
+            range.setEnd(endTextNode.node, endTextNode.offset);
             
-            const criterion = CRITERIA_MAP[span.insight.criterionId] || { colorVar: '--crit-timeline' };
-            highlight.style.cssText = `
-              left: ${rect.left - editorRect.left}px;
-              top: ${rect.top - editorRect.top}px;
-              width: ${rect.width}px;
-              height: ${rect.height}px;
-              background: hsl(var(${criterion.colorVar}) / 0.2);
-              border: 1px solid hsl(var(${criterion.colorVar}) / 0.4);
-              z-index: 1;
-            `;
+            const rect = range.getBoundingClientRect();
+            const editorRect = editor.getBoundingClientRect();
             
-            highlight.addEventListener('click', (e) => {
-              e.stopPropagation();
-              onInsightSelect?.(span.insight);
-              selectTextRange(editor, span.start, span.end);
-            });
-            
-            editor.appendChild(highlight);
-            span.element = highlight;
+            if (rect.width > 0 && rect.height > 0) {
+              const highlight = document.createElement('div');
+              highlight.className = `insight-highlight absolute pointer-events-none rounded-sm transition-colors duration-150 ${
+                selectedInsight?.id === span.insight.id ? 'ring-2 ring-primary/50' : ''
+              }`;
+              
+              const criterion = CRITERIA_MAP[span.insight.criterionId] || { colorVar: '--crit-timeline' };
+              highlight.style.cssText = `
+                left: ${rect.left - editorRect.left}px;
+                top: ${rect.top - editorRect.top}px;
+                width: ${rect.width}px;
+                height: ${rect.height}px;
+                background: hsl(var(${criterion.colorVar}) / 0.2);
+                border: 1px solid hsl(var(${criterion.colorVar}) / 0.4);
+                z-index: 1;
+                pointer-events: auto;
+              `;
+              
+              highlight.addEventListener('click', (e) => {
+                e.stopPropagation();
+                onInsightSelect?.(span.insight);
+                selectTextRange(editor, span.start, span.end);
+              });
+              
+              editor.appendChild(highlight);
+              span.element = highlight;
+            }
+          } catch (error) {
+            console.warn('Error creating highlight range:', error);
           }
-        } catch (error) {
-          console.warn('Error creating highlight range:', error);
         }
-      }
+      });
+      
+      // Restore cursor position after highlighting
+      restoreCursorPosition();
     });
-  }, [insights, selectedInsight, onInsightSelect]);
+  }, [insights, selectedInsight, onInsightSelect, restoreCursorPosition]);
 
   // Helper function to find text node at specific offset
   const getTextNodeAtOffset = (container: Node, offset: number): { node: Text; offset: number } | null => {
@@ -192,8 +298,28 @@ export const DecisionEditor: React.FC<Props> = ({
     return () => clearTimeout(timer);
   }, [renderHighlights]);
 
+  // Initialize undo manager with initial content
+  useEffect(() => {
+    if (content && undoRedoManager.canUndo() === false) {
+      undoRedoManager.saveState(content);
+    }
+  }, [content, undoRedoManager]);
+
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Undo/Redo shortcuts
+    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+    
+    if (e.ctrlKey && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+
     if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
       e.preventDefault();
       
@@ -215,10 +341,36 @@ export const DecisionEditor: React.FC<Props> = ({
       onInsightSelect?.(nextInsight);
       selectTextRange(editorRef.current!, nextInsight.rangeStart, nextInsight.rangeEnd);
     }
-  }, [insights, selectedInsight, onInsightSelect]);
+  }, [insights, selectedInsight, onInsightSelect, handleUndo, handleRedo]);
 
   return (
     <div className="relative bg-white border rounded-lg">
+      {/* Undo/Redo toolbar */}
+      <div className="flex items-center gap-2 p-2 border-b border-gray-200">
+        <button
+          onClick={handleUndo}
+          disabled={!undoRedoManager.canUndo()}
+          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="ביטול (Ctrl+Z)"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+          </svg>
+          ביטול
+        </button>
+        <button
+          onClick={handleRedo}
+          disabled={!undoRedoManager.canRedo()}
+          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="חזרה (Ctrl+Y)"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" />
+          </svg>
+          חזרה
+        </button>
+      </div>
+
       <div
         ref={editorRef}
         className="relative min-h-[60vh] p-6 outline-none overflow-y-auto"
