@@ -112,10 +112,7 @@ export const DecisionEditor: React.FC<Props> = ({
       const { insight, rangeStart, rangeEnd } = event.detail;
       console.log('🎯 DecisionEditor - Received selectInsight event:', { rangeStart, rangeEnd });
       
-      // Select the text range
-      selectTextRange(editor, rangeStart, rangeEnd);
-      
-      // Scroll to the range
+      // Just scroll to the range without selecting text (to avoid jumping to corner)
       setTimeout(() => {
         const range = document.createRange();
         const startNode = getTextNodeAtOffset(editor, rangeStart);
@@ -388,7 +385,11 @@ export const DecisionEditor: React.FC<Props> = ({
       
       const nextInsight = activeInsights[newIndex];
       onInsightSelect?.(nextInsight);
-      selectTextRange(editorRef.current!, nextInsight.rangeStart, nextInsight.rangeEnd);
+      // Just scroll to insight without selecting text to avoid corner jumping
+      const element = document.querySelector(`[data-ins="${nextInsight.id}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
   }, [insights, selectedInsight, onInsightSelect, handleUndo, handleRedo]);
 
