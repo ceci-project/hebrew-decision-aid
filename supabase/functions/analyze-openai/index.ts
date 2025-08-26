@@ -1,4 +1,5 @@
-// Updated: 2025-08-17 15:30 - Fixed OPENAI_API_KEY issue
+
+// Updated: 2025-08-26 - Added support for suggestion_primary and suggestion_secondary fields
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -94,6 +95,8 @@ Return an object with fields: criteria[12], summary, insights[]. See the exact t
     "quote": string,
     "explanation": string,
     "suggestion": string,
+    "suggestion_primary": string,    // Primary improvement suggestion - actionable and specific
+    "suggestion_secondary": string,  // Secondary/alternative improvement suggestion
     "rangeStart": number,
     "rangeEnd": number
   }>
@@ -103,7 +106,8 @@ Rules:
 - rangeStart/rangeEnd are [start,end) offsets for the first occurrence; if not found, set both to 0.
 - Prefer short quotes (3–8 words).
 - Hebrew output where relevant; JSON only, no markdown fences.
-- Keep insights to at most ${maxInsights}.`;
+- Keep insights to at most ${maxInsights}.
+- For each insight, provide both suggestion_primary (main actionable recommendation) and suggestion_secondary (alternative or complementary approach).`;
 
     const user = `Content (UTF-8 Hebrew allowed):\n"""${content}"""`;
 
@@ -190,10 +194,12 @@ Rules:
                       quote: { type: 'string' },
                       explanation: { type: 'string' },
                       suggestion: { type: 'string' },
+                      suggestion_primary: { type: 'string' },
+                      suggestion_secondary: { type: 'string' },
                       rangeStart: { type: 'number' },
                       rangeEnd: { type: 'number' }
                     },
-                    required: ['id','criterionId','quote','explanation','suggestion','rangeStart','rangeEnd']
+                    required: ['id','criterionId','quote','explanation','suggestion','suggestion_primary','suggestion_secondary','rangeStart','rangeEnd']
                   }
                 }
               },
@@ -272,16 +278,87 @@ Rules:
       parsed = { insights: [], criteria: [], summary: null };
     }
 
+    // Helper function to generate detailed suggestions from basic suggestion
+    const generateDetailedSuggestions = (basicSuggestion: string, criterionId: string) => {
+      const suggestions: Record<string, { primary: string; secondary: string }> = {
+        timeline: {
+          primary: "הוסיפו לוח זמנים מפורט עם תאריכי יעד ברורים ומנגנון אכיפה.",
+          secondary: "הגדירו אבני דרך ביניים עם נקודות בקרה וסנקציות באי-עמידה."
+        },
+        integrator: {
+          primary: "הקימו צוות מתכלל עם הרכב ברור, סמכויות מוגדרות ותדירות ישיבות קבועה.",
+          secondary: "מנו רכז תיאום עליון עם סמכות להכריע בחילוקי דעות בין הגורמים."
+        },
+        reporting: {
+          primary: "קבעו מנגנון דיווח סדור: תדירות, פורמט סטנדרטי וטיפול בחריגות.",
+          secondary: "הקימו מערכת מעקב דיגיטלית עם התרעות אוטומטיות ודשבורד מנהלים."
+        },
+        evaluation: {
+          primary: "הגדירו מדדי הצלחה כמותיים ואיכותיים עם שיטת הערכה מחזורית.",
+          secondary: "הקימו ועדת הערכה חיצונית עם מנדט ברור ותקציב ייעודי."
+        },
+        external_audit: {
+          primary: "קבעו ביקורת חיצונית שנתית עם חובת פרסום ממצאים ותגובת ההנהלה.",
+          secondary: "הטמיעו מנגנון ביקורת עמיתים (peer review) עם גורמים מקצועיים חיצוניים."
+        },
+        resources: {
+          primary: "פרטו את התקציב הנדרש, מקורות המימון והכוח האדם הייעודי.",
+          secondary: "הכינו תוכנית גיוס משאבים חלופית ומנגנון לעדכון תקציבי בזמן אמת."
+        },
+        multi_levels: {
+          primary: "הבהירו את חלוקת האחריות בין הדרגים ומנגנוני התיאום הנדרשים.",
+          secondary: "הקימו מועצת תיאום עליונה עם נציגות מכל הרמות הרלוונטיות."
+        },
+        structure: {
+          primary: "חלקו את התוכנית למשימות ברורות עם בעלי תפקידים ואבני דרך מוגדרות.",
+          secondary: "יצרו מטריצת אחריות (RACI) מפורטת לכל משימה ופעילות."
+        },
+        field_implementation: {
+          primary: "תארו בפירוט את היישום בשטח: מי מבצע, איך, עם אילו סמכויות ופיקוח.",
+          secondary: "הכינו מדריך יישום מעשי עם תרחישים, כלים ונהלי פתרון בעיות."
+        },
+        arbitrator: {
+          primary: "מנו גורם מכריע ברור עם SLA מוגדר לקבלת החלטות וסמכות אכיפה.",
+          secondary: "הקימו מנגנון בוררות פנימי עם נהלים ברורים לטיפול בסכסוכים."
+        },
+        cross_sector: {
+          primary: "שלבו בעלי עניין רלוונטיים ותיאום בין-משרדי עם מנגנוני שיתוף פעולה.",
+          secondary: "הקימו פורום רב-מגזרי עם מנדט ברור ותקציב לפעילות משותפת."
+        },
+        outcomes: {
+          primary: "הגדירו מדדי תוצאה ברורים עם יעדים כמותיים ולוחות זמנים למימוש.",
+          secondary: "פתחו מערכת מעקב אחר השפעה ארוכת טווח עם הערכה תקופתית."
+        }
+      };
+
+      const defaultSuggestions = suggestions[criterionId as keyof typeof suggestions] || {
+        primary: basicSuggestion || "שפרו את הסעיף בהתאם לרובריקה.",
+        secondary: "הוסיפו מנגנוני בקרה ומעקב נוספים."
+      };
+
+      return {
+        primary: basicSuggestion || defaultSuggestions.primary,
+        secondary: defaultSuggestions.secondary
+      };
+    };
+
     let insights = Array.isArray(parsed.insights)
-      ? parsed.insights.map((i: any, idx: number) => ({
-          id: String(i?.id ?? `ai-${idx}`),
-          criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
-          quote: String(i?.quote ?? ''),
-          explanation: String(i?.explanation ?? ''),
-          suggestion: String(i?.suggestion ?? ''),
-          rangeStart: Number.isFinite(i?.rangeStart) ? i.rangeStart : 0,
-          rangeEnd: Number.isFinite(i?.rangeEnd) ? i.rangeEnd : 0,
-        }))
+      ? parsed.insights.map((i: any, idx: number) => {
+          const basicSuggestion = String(i?.suggestion ?? '');
+          const detailedSuggestions = generateDetailedSuggestions(basicSuggestion, i?.criterionId);
+          
+          return {
+            id: String(i?.id ?? `ai-${idx}`),
+            criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
+            quote: String(i?.quote ?? ''),
+            explanation: String(i?.explanation ?? ''),
+            suggestion: basicSuggestion,
+            suggestion_primary: String(i?.suggestion_primary ?? detailedSuggestions.primary),
+            suggestion_secondary: String(i?.suggestion_secondary ?? detailedSuggestions.secondary),
+            rangeStart: Number.isFinite(i?.rangeStart) ? i.rangeStart : 0,
+            rangeEnd: Number.isFinite(i?.rangeEnd) ? i.rangeEnd : 0,
+          };
+        })
       : [];
 
     const criteria = Array.isArray(parsed.criteria)
@@ -306,12 +383,15 @@ Rules:
         if (Array.isArray(c.evidence) && c.evidence.length) {
           for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
             const e = c.evidence[k];
+            const detailedSuggestions = generateDetailedSuggestions('', c.id);
             synth.push({
               id: `${c.id}-ev-${k}`,
               criterionId: c.id,
               quote: String(e.quote || ''),
               explanation: c.justification || `חיזוק: ${c.name}`,
               suggestion: `שפרו את הסעיף "${c.name}" בהתאם לרובריקה.`,
+              suggestion_primary: detailedSuggestions.primary,
+              suggestion_secondary: detailedSuggestions.secondary,
               rangeStart: Number.isFinite(e.rangeStart) ? e.rangeStart : 0,
               rangeEnd: Number.isFinite(e.rangeEnd) ? e.rangeEnd : 0,
             });
@@ -337,7 +417,7 @@ Rules:
       summary = { feasibilityPercent: percent, feasibilityLevel: level, reasoning: summary?.reasoning || '' } as any;
     }
 
-    console.log('openai analysis counts', { insights: insights.length, criteria: criteria.length, summary: !!summary, model });
+    console.log('openai analysis counts', { insights: insights.length, criteria: criteria.length, summary: !!summary, model, withDetailedSuggestions: true });
     return new Response(
       JSON.stringify({ insights, criteria, summary, meta: { source: 'openai', model } }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
