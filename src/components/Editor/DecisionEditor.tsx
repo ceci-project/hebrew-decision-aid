@@ -109,8 +109,15 @@ export const DecisionEditor: React.FC<Props> = ({
     if (!editor) return;
 
     const handleSelectInsight = (event: CustomEvent) => {
-      const { insight, rangeStart, rangeEnd } = event.detail;
-      console.log('🎯 DecisionEditor - Received selectInsight event:', { rangeStart, rangeEnd });
+      const { insight } = event.detail;
+      const rangeStart = insight?.rangeStart;
+      const rangeEnd = insight?.rangeEnd;
+      console.log('🎯 DecisionEditor - Received selectInsight event:', { 
+        insightId: insight?.id,
+        rangeStart, 
+        rangeEnd,
+        quote: insight?.quote?.substring(0, 50) + '...'
+      });
       
       // Just scroll to the range without selecting text (to avoid jumping to corner)
       setTimeout(() => {
