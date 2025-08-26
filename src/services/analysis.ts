@@ -126,87 +126,88 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
       .filter((ch) => /[\p{L}\p{N}]/u.test(ch))
       .join('');
 
+    const clamp = (n: number) => Math.max(0, Math.min(content.length, n));
+
+    const findApprox = (q: string): { start: number; end: number } => {
+      if (!q) return { start: 0, end: 0 };
+      
+      console.log(`🔍 Finding quote: "${q.substring(0, 50)}..."`);
+      
+      // Step 1: Try exact match
+      let pos = content.indexOf(q);
+      if (pos >= 0) {
+        console.log('✅ Exact match found at:', pos);
+        return { start: pos, end: pos + q.length };
+      }
+      
+      // Step 2: Try trimmed version
+      const qt = q.trim();
+      pos = qt ? content.indexOf(qt) : -1;
+      if (pos >= 0) {
+        console.log('✅ Trimmed match found at:', pos);
+        return { start: pos, end: pos + qt.length };
+      }
+      
+      // Step 3: Try without quotes and special punctuation
+      const qClean = qt.replace(/[״״״""'']/g, '"').replace(/[–—−]/g, '-');
+      pos = content.indexOf(qClean);
+      if (pos >= 0) {
+        console.log('✅ Clean match found at:', pos);
+        return { start: pos, end: pos + qClean.length };
+      }
+      
+      // Step 4: Try normalized search (ignore quotes/punctuation/spacing/dir marks)
+      const { text: normContent, map } = getNormalized();
+      const qn = normalize(qt);
+      if (qn.length >= 3) { // Lower threshold for Hebrew
+        const npos = normContent.indexOf(qn);
+        if (npos >= 0) {
+          const startOrig = map[npos] ?? 0;
+          const endOrig = clamp((map[npos + qn.length - 1] ?? startOrig) + 1);
+          console.log('✅ Normalized match found:', { startOrig, endOrig });
+          return { start: startOrig, end: endOrig };
+        }
+      }
+      
+      // Step 5: Try fuzzy search with word boundaries
+      const words = qt.split(/\s+/).filter(w => w.length > 2);
+      if (words.length > 0) {
+        const firstWord = words[0];
+        const firstWordPos = content.indexOf(firstWord);
+        if (firstWordPos >= 0) {
+          // Look for the quote in a reasonable range around the first word
+          const searchStart = Math.max(0, firstWordPos - 100);
+          const searchEnd = Math.min(content.length, firstWordPos + qt.length + 200);
+          const searchRange = content.substring(searchStart, searchEnd);
+          
+          // Try to find a partial match
+          const partialMatch = searchRange.indexOf(qt.substring(0, Math.min(50, qt.length)));
+          if (partialMatch >= 0) {
+            const actualStart = searchStart + partialMatch;
+            const actualEnd = Math.min(content.length, actualStart + qt.length);
+            console.log('✅ Fuzzy match found:', { actualStart, actualEnd });
+            return { start: actualStart, end: actualEnd };
+          }
+        }
+      }
+      
+      // Step 6: Try prefix chunk (helps when the model shortens quotes)
+      const chunk = qt.slice(0, Math.min(30, qt.length));
+      if (chunk.length >= 6) { // Minimum meaningful chunk
+        pos = content.indexOf(chunk);
+        if (pos >= 0) {
+          console.log('✅ Prefix match found at:', pos);
+          return { start: pos, end: clamp(pos + qt.length) };
+        }
+      }
+      
+      console.log('❌ No match found for quote');
+      return { start: 0, end: 0 };
+    };
+
     const insights: Insight[] = raw.map((i, idx) => {
       const quote = String(i.quote ?? '');
-      const clamp = (n: number) => Math.max(0, Math.min(content.length, n));
-
-      const findApprox = (q: string): { start: number; end: number } => {
-        if (!q) return { start: 0, end: 0 };
-        
-        console.log(`🔍 Finding quote: "${q.substring(0, 50)}..."`);
-        
-        // Step 1: Try exact match
-        let pos = content.indexOf(q);
-        if (pos >= 0) {
-          console.log('✅ Exact match found at:', pos);
-          return { start: pos, end: pos + q.length };
-        }
-        
-        // Step 2: Try trimmed version
-        const qt = q.trim();
-        pos = qt ? content.indexOf(qt) : -1;
-        if (pos >= 0) {
-          console.log('✅ Trimmed match found at:', pos);
-          return { start: pos, end: pos + qt.length };
-        }
-        
-        // Step 3: Try without quotes and special punctuation
-        const qClean = qt.replace(/[״״״""'']/g, '"').replace(/[–—−]/g, '-');
-        pos = content.indexOf(qClean);
-        if (pos >= 0) {
-          console.log('✅ Clean match found at:', pos);
-          return { start: pos, end: pos + qClean.length };
-        }
-        
-        // Step 4: Try normalized search (ignore quotes/punctuation/spacing/dir marks)
-        const { text: normContent, map } = getNormalized();
-        const qn = normalize(qt);
-        if (qn.length >= 3) { // Lower threshold for Hebrew
-          const npos = normContent.indexOf(qn);
-          if (npos >= 0) {
-            const startOrig = map[npos] ?? 0;
-            const endOrig = clamp((map[npos + qn.length - 1] ?? startOrig) + 1);
-            console.log('✅ Normalized match found:', { startOrig, endOrig });
-            return { start: startOrig, end: endOrig };
-          }
-        }
-        
-        // Step 5: Try fuzzy search with word boundaries
-        const words = qt.split(/\s+/).filter(w => w.length > 2);
-        if (words.length > 0) {
-          const firstWord = words[0];
-          const firstWordPos = content.indexOf(firstWord);
-          if (firstWordPos >= 0) {
-            // Look for the quote in a reasonable range around the first word
-            const searchStart = Math.max(0, firstWordPos - 100);
-            const searchEnd = Math.min(content.length, firstWordPos + qt.length + 200);
-            const searchRange = content.substring(searchStart, searchEnd);
-            
-            // Try to find a partial match
-            const partialMatch = searchRange.indexOf(qt.substring(0, Math.min(50, qt.length)));
-            if (partialMatch >= 0) {
-              const actualStart = searchStart + partialMatch;
-              const actualEnd = Math.min(content.length, actualStart + qt.length);
-              console.log('✅ Fuzzy match found:', { actualStart, actualEnd });
-              return { start: actualStart, end: actualEnd };
-            }
-          }
-        }
-        
-        // Step 6: Try prefix chunk (helps when the model shortens quotes)
-        const chunk = qt.slice(0, Math.min(30, qt.length));
-        if (chunk.length >= 6) { // Minimum meaningful chunk
-          pos = content.indexOf(chunk);
-          if (pos >= 0) {
-            console.log('✅ Prefix match found at:', pos);
-            return { start: pos, end: clamp(pos + qt.length) };
-          }
-        }
-        
-        console.log('❌ No match found for quote');
-        return { start: 0, end: 0 };
-      };
-
+      
       let rangeStart = typeof i.rangeStart === 'number' ? clamp(i.rangeStart) : 0;
       let rangeEnd = typeof i.rangeEnd === 'number' ? clamp(i.rangeEnd) : 0;
 
@@ -306,16 +307,31 @@ export async function analyzeDocument(content: string): Promise<AnalysisResult> 
         for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
           const e = c.evidence[k];
           const suggestion = getDefaultSuggestion(c.id);
+          
+          // Get the correct ranges for the quote
+          const quote = String(e.quote || '');
+          let rangeStart = Number.isFinite((e as any).rangeStart) ? (e as any).rangeStart : 0;
+          let rangeEnd = Number.isFinite((e as any).rangeEnd) ? (e as any).rangeEnd : 0;
+          
+          // If quote exists but ranges don't match, find the correct ranges
+          if (quote && (rangeEnd <= rangeStart || content.slice(rangeStart, rangeEnd) !== quote)) {
+            console.log(`🔍 Quote-range mismatch for ${c.id}-ev-${k}: "${quote.substring(0, 50)}..." ranges: ${rangeStart}-${rangeEnd}`);
+            const approx = findApprox(quote);
+            rangeStart = approx.start;
+            rangeEnd = approx.end;
+            console.log(`🎯 Corrected ranges: ${rangeStart}-${rangeEnd}, content match: "${content.slice(rangeStart, rangeEnd).substring(0, 50)}..."`);
+          }
+          
           synthesized.push({
             id: `${c.id}-ev-${k}`,
             criterionId: c.id,
-            quote: String(e.quote || ''),
+            quote,
             explanation: c.justification || `חיזוק: ${c.name}`,
             suggestion,
             suggestion_primary: suggestion,
             suggestion_secondary: `הוסיפו מנגנוני בקרה ומעקב נוספים עבור ${c.name}.`,
-            rangeStart: Number.isFinite((e as any).rangeStart) ? (e as any).rangeStart : 0,
-            rangeEnd: Number.isFinite((e as any).rangeEnd) ? (e as any).rangeEnd : 0,
+            rangeStart,
+            rangeEnd,
           });
         }
       }
