@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Insight } from "@/types/models";
 import FindingsAccordion from "./FindingsAccordion";
@@ -21,20 +21,12 @@ interface Props {
 
 const FindingsPanel: React.FC<Props> = ({ insights, criteriaData = [], onJump }) => {
   return (
-    <Tabs defaultValue="simplified" className="w-full">
+    <Tabs defaultValue="criteria" className="w-full">
       <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="simplified">תצוגה פשוטה</TabsTrigger>
+        <TabsTrigger value="criteria">סיכום מהיר</TabsTrigger>
         <TabsTrigger value="detailed">תצוגה מפורטת</TabsTrigger>
-        <TabsTrigger value="criteria">לפי קריטריונים</TabsTrigger>
+        <TabsTrigger value="simplified">תצוגה פשוטה</TabsTrigger>
       </TabsList>
-      
-      <TabsContent value="simplified" className="mt-4">
-        <SimplifiedFindings insights={insights} onJumpToText={onJump} />
-      </TabsContent>
-      
-      <TabsContent value="detailed" className="mt-4">
-        <FindingsAccordion insights={insights} onJump={onJump} />
-      </TabsContent>
       
       <TabsContent value="criteria" className="mt-4">
         <CriterionAccordion 
@@ -42,6 +34,14 @@ const FindingsPanel: React.FC<Props> = ({ insights, criteriaData = [], onJump })
           insights={insights} 
           onJump={onJump} 
         />
+      </TabsContent>
+      
+      <TabsContent value="detailed" className="mt-4">
+        <FindingsAccordion insights={insights} onJump={onJump} />
+      </TabsContent>
+      
+      <TabsContent value="simplified" className="mt-4">
+        <SimplifiedFindings insights={insights} onJumpToText={onJump} />
       </TabsContent>
     </Tabs>
   );
