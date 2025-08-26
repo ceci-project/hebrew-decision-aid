@@ -218,6 +218,24 @@ const Index = () => {
             <Button onClick={handlePick} disabled={busy} variant="outline" size="sm">
               {busy ? "טוען..." : "העלה קובץ"}
             </Button>
+            <Button
+              onClick={() => {
+                setContent("");
+                setTitle("מסמך חדש");
+                setInsights([]);
+                setSelectedInsight(null);
+                setShowAnalysis(false);
+                setCriteria([]);
+                setSummary(null);
+                setMeta(undefined);
+                toast({ title: "הטקסט נוקה", description: "הקנבאס חזר למצב ריק" });
+              }}
+              disabled={busy}
+              variant="outline"
+              size="sm"
+            >
+              נקה
+            </Button>
             <Link to="/history">
               <Button variant="outline" size="sm">
                 היסטוריה
