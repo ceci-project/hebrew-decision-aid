@@ -277,15 +277,21 @@ const EditorPage = () => {
           </div>
         </div>
 
-        {/* Right Sidebar */}
-        <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto max-h-screen">
-          {selectedInsight ? (
-            <InsightDetailPanel
-              insight={selectedInsight}
-              onApplySuggestion={handleApplySuggestion}
-              onClose={() => setSelectedInsight(null)}
-            />
-          ) : (
+        {/* Right Sidebar - Split Layout */}
+        <div className="w-96 bg-white border-l border-gray-200 flex flex-col max-h-screen">
+          {/* Sticky Insight Detail Panel */}
+          {selectedInsight && (
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
+              <InsightDetailPanel
+                insight={selectedInsight}
+                onApplySuggestion={handleApplySuggestion}
+                onClose={() => setSelectedInsight(null)}
+              />
+            </div>
+          )}
+          
+          {/* Scrollable Analysis Panel */}
+          <div className="flex-1 overflow-y-auto">
             <div className="p-6">
               <div className="space-y-6">
                 {/* Version Info */}
@@ -350,11 +356,11 @@ const EditorPage = () => {
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Footer with version */}
-          <div className="border-t border-gray-200 p-4 text-center text-xs text-gray-500">
-            {UI_VERSION}
+            
+            {/* Footer with version */}
+            <div className="border-t border-gray-200 p-4 text-center text-xs text-gray-500">
+              {UI_VERSION}
+            </div>
           </div>
         </div>
       </div>
