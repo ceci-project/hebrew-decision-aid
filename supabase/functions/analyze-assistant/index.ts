@@ -1,8 +1,7 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const VERSION = "AssistantPath v2025-08-26-Enhanced-Hebrew";
+const VERSION = "AssistantPath v2025-08-26-Enhanced-60s-Timeout";
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
 const assistantId = Deno.env.get('ASSISTANT_ID');
@@ -63,12 +62,12 @@ serve(async (req) => {
     // Enhanced content handling for long texts
     const isLongText = content.length > 4000;
     const adjustedMaxInsights = isLongText ? Math.max(maxInsights, 32) : maxInsights;
-    const truncatedContent = content.length > 12000 ? content.substring(0, 12000) + "..." : content;
+    const truncatedContent = content.length > 15000 ? content.substring(0, 15000) + "..." : content; // Increased limit
     console.log(`📝 ${VERSION} - Content prepared: originalLength=${content.length}, isLongText=${isLongText}, adjustedMaxInsights=${adjustedMaxInsights}, truncatedLength=${truncatedContent.length}`);
 
-    // Enhanced timeout for long texts
-    const timeoutDuration = isLongText ? 45000 : 30000; // 45s for long texts, 30s for normal
-    const maxPollingAttempts = isLongText ? 18 : 12; // More attempts for long texts
+    // Enhanced timeout for long texts - increased to 60 seconds
+    const timeoutDuration = isLongText ? 60000 : 30000; // 60s for long texts, 30s for normal
+    const maxPollingAttempts = isLongText ? 30 : 15; // 30 attempts for long texts (60s total)
     
     // Create AbortController for timeout
     const controller = new AbortController();
@@ -104,39 +103,54 @@ serve(async (req) => {
       const threadId = thread.id;
       console.log(`✅ ${VERSION} - Thread created: ${threadId}`);
 
-      // Enhanced prompt for better Hebrew processing and long text handling
+      // Enhanced prompt for better Hebrew processing and comprehensive text analysis
       const enhancedPrompt = `נתח את המסמך הממשלתי הבא ותן ביקורת מקיפה על פי רובריקת 12 הקריטריונים.
 
-🔥 הנחיות קריטיות - קרא בקפידה:
+🔥 הנחיות קריטיות - קרא בקפידה והקפד על יישומן:
 
-1. **ניתוח מלא של הטקסט**: נתח את כל חלקי המסמך, כולל התחילה, האמצע והסוף. וודא שהתובנות מפוזרות על פני כל הטקסט.
+1. **ניתוח מלא ומקיף של כל הטקסט**: 
+   - נתח את כל חלקי המסמך מתחילתו ועד סופו - זה חובה!
+   - וודא שהתובנות מפוזרות על פני כל הטקסט (תחילה 30%, אמצע 40%, סוף 30%)
+   - אל תתעלם מהחלקים האחרונים של המסמך - הם לעיתים מכילים פרטים חשובים
+   - ${isLongText ? 'טקסט זה ארוך במיוחד - חובה לנתח גם את החלקים המאוחרים!' : ''}
 
-2. **ציטוטים מדויקים**: 
-   - השתמש בציטוטים קצרים ומדויקים (עד 50 תווים)
+2. **כמות התובנות נדרשת**: צור בדיוק ${adjustedMaxInsights} תובנות מפורטות
+   - ${isLongText ? 'עבור טקסט ארוך זה, חובה למצוא תובנות גם מהחלק האחרון של המסמך' : ''}
+   - חלק את התובנות באופן שווה בין הקריטריונים השונים
+   - כל קריטריון חייב לקבל לפחות 2-3 תובנות
+
+3. **ציטוטים מדויקים ברמה גבוהה**:
+   - השתמש בציטוטים קצרים ומדויקים (20-50 תווים בלבד)
+   - ציטוט חייב להופיע בדיוק במסמך כפי שאתה מציין
    - הימנע מרווחים מיותרים בתחילת או סוף הציטוט
-   - ודא שהציטוט מופיע בדיוק במסמך כפי שאתה מציין
-   - אם הטקסט ארוך, קח ציטוטים מייצגים ממקומות שונים
+   - ודא שה-rangeStart וה-rangeEnd מדויקים לחלוטין
 
-3. **כמות התובנות**: צור ${adjustedMaxInsights} תובנות ${isLongText ? '(טקסט ארוך - נדרשת כיסוי מלא)' : ''}
+4. **עברית בלבד**: כל התוכן חייב להיות בעברית מושלמת ברמה אקדמית!
 
-4. **עברית בלבד**: כל התוכן חייב להיות בעברית מושלמת!
+5. **התמחות בטקסט ממשלתי עברי**:
+   - זהה מונחים מקצועיים ממשלתיים
+   - התמקד בחסרים מבניים ותהליכיים
+   - זהה בעיות בהגדרת אחריות וסמכויות
+   - התייחס לחוסר בלוחות זמנים ומנגנוני פיקוח
 
 עבור כל insight, כלול:
-- explanation: הסבר ברור ומדויק של הבעיה או החוזקה (20-40 מילים)
-- suggestion: הצעה קצרה לשיפור (10-20 מילים)  
-- suggestion_primary: הצעה מפורטת ראשונית (40-80 מילים)
-- suggestion_secondary: הצעה חלופית או משלימה (40-80 מילים)
-- quote: ציטוט קצר ומדויק מהמסמך (עד 50 תווים)
+- explanation: הסבר ברור ומדויק של הבעיה או החוזקה (30-50 מילים בעברית)
+- suggestion: הצעה קצרה לשיפור (15-25 מילים בעברית)  
+- suggestion_primary: הצעה מפורטת ראשונית (50-80 מילים בעברית)
+- suggestion_secondary: הצעה חלופית או משלימה (50-80 מילים בעברית)
+- quote: ציטוט קצר ומדויק מהמסמך (20-50 תווים)
+- rangeStart, rangeEnd: מיקום מדויק של הציטוט בטקסט
 
 ${isLongText ? `
-⚠️ טקסט ארוך - הנחיות נוספות:
-- פזר תובנות על פני כל הטקסט (תחילה, אמצע, סוף)
-- ודא שאתה מנתח גם את החלקים המאוחרים של המסמך
-- תן עדיפות לנושאים מרכזיים שחוזרים על עצמם
-- השתמש בציטוטים מייצגים ממקטעים שונים
+⚠️ טקסט ארוך - הנחיות נוספות חובה:
+- פזר תובנות על פני כל הטקסט: תחילה (30%), אמצע (40%), סוף (30%)
+- חובה לנתח גם את החלקים המאוחרים של המסמך
+- תן דגש מיוחד לחלק הסופי שלעיתים מכיל פרטי יישום חשובים
+- השתמש בציטוטים מייצגים ממקטעים שונים לאורך כל הטקסט
+- וודא שיש לך תובנות מכל הקריטריונים גם מהחלק הסופי
 ` : ''}
 
-תוכן המסמך:
+תוכן המסמך לניתוח:
 """
 ${truncatedContent}
 """
@@ -148,7 +162,7 @@ ${truncatedContent}
   "insights": [${adjustedMaxInsights} תובנות עם id, criterionId, quote, explanation (בעברית), suggestion (בעברית), suggestion_primary (בעברית), suggestion_secondary (בעברית), rangeStart, rangeEnd]
 }
 
-זכור: כל הטקסט בעברית, ציטוטים מדויקים וקצרים, כיסוי מלא של הטקסט!`;
+זכור: כל הטקסט בעברית, ${adjustedMaxInsights} תובנות בדיוק, ציטוטים מדויקים וקצרים, כיסוי מלא של הטקסט מתחילתו ועד סופו!`;
 
       // Step 2: Add a message to the thread
       console.log(`🔄 ${VERSION} - Step 2: Adding enhanced message to thread`);
@@ -192,7 +206,7 @@ ${truncatedContent}
       const runId = run.id;
       console.log(`✅ ${VERSION} - Run created: ${runId}, status: ${run.status}`);
 
-      // Step 4: Enhanced polling for completion
+      // Step 4: Enhanced polling for completion with progress tracking
       console.log(`🔄 ${VERSION} - Step 4: Enhanced polling (max attempts: ${maxPollingAttempts})`);
       let runStatus = run.status;
       let attempts = 0;
@@ -200,7 +214,8 @@ ${truncatedContent}
       while (['queued', 'in_progress'].includes(runStatus) && attempts < maxPollingAttempts) {
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
         attempts++;
-        console.log(`🔄 ${VERSION} - Polling attempt ${attempts}/${maxPollingAttempts}, current status: ${runStatus}`);
+        const progressPercent = Math.round((attempts / maxPollingAttempts) * 100);
+        console.log(`🔄 ${VERSION} - Polling attempt ${attempts}/${maxPollingAttempts} (${progressPercent}%), current status: ${runStatus}`);
 
         try {
           const statusResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
@@ -225,11 +240,11 @@ ${truncatedContent}
       clearTimeout(timeoutId);
 
       if (runStatus !== 'completed') {
-        console.error(`❌ ${VERSION} - Run failed with final status: ${runStatus} after ${attempts} attempts`);
-        throw new Error(`Analysis timed out or failed with status: ${runStatus}`);
+        console.error(`❌ ${VERSION} - Run failed with final status: ${runStatus} after ${attempts} attempts (${attempts * 2}s)`);
+        throw new Error(`Analysis timed out or failed with status: ${runStatus} after ${attempts * 2} seconds`);
       }
 
-      console.log(`✅ ${VERSION} - Run completed successfully after ${attempts} polling attempts`);
+      console.log(`✅ ${VERSION} - Run completed successfully after ${attempts} polling attempts (${attempts * 2}s)`);
 
       // Step 5: Get the messages
       console.log(`🔄 ${VERSION} - Step 5: Retrieving messages`);
@@ -255,10 +270,9 @@ ${truncatedContent}
       const responseText = assistantMessage.content[0].text.value;
       console.log(`📄 ${VERSION} - Response received, length: ${responseText.length}`);
 
-      // Enhanced JSON parsing with better error handling
+      // Enhanced JSON parsing with multiple extraction methods
       let parsed: any;
       try {
-        // Try multiple JSON extraction methods
         let jsonText = responseText.trim();
         
         // Method 1: Look for JSON blocks in markdown
@@ -313,14 +327,14 @@ ${truncatedContent}
         : [];
 
       // Enhanced synthesis from criteria evidence with better distribution
-      if ((!insights || insights.length < adjustedMaxInsights * 0.5) && Array.isArray(criteria)) {
+      if ((!insights || insights.length < adjustedMaxInsights * 0.7) && Array.isArray(criteria)) {
         console.log(`🔄 ${VERSION} - Synthesizing additional insights from criteria evidence`);
         const synth: any[] = [];
         const existingByCrit = new Set(insights.map((i) => i.criterionId));
         
         for (const c of criteria) {
           if (Array.isArray(c.evidence) && c.evidence.length) {
-            const evidenceToUse = existingByCrit.has(c.id) ? 1 : Math.min(c.evidence.length, 2);
+            const evidenceToUse = existingByCrit.has(c.id) ? 1 : Math.min(c.evidence.length, 3); // More evidence per criterion
             for (let k = 0; k < evidenceToUse; k++) {
               const e = c.evidence[k];
               const defaultSuggestions = getDefaultSuggestions(c.id);
@@ -360,14 +374,14 @@ ${truncatedContent}
       }
 
       console.log(`🎉 ${VERSION} - Analysis completed successfully: ${insights.length} insights, ${criteria.length} criteria`);
-      console.log(`📊 ${VERSION} - Final stats: { isLongText: ${isLongText}, originalLength: ${content.length}, insights: ${insights.length}, adjustedMaxInsights: ${adjustedMaxInsights} }`);
+      console.log(`📊 ${VERSION} - Final stats: { isLongText: ${isLongText}, originalLength: ${content.length}, insights: ${insights.length}, adjustedMaxInsights: ${adjustedMaxInsights}, duration: ${attempts * 2}s }`);
 
       return new Response(
         JSON.stringify({ 
           insights, 
           criteria, 
           summary, 
-          meta: { source: 'assistants', threadId, runId, version: VERSION, isLongText, originalLength: content.length } 
+          meta: { source: 'assistants', threadId, runId, version: VERSION, isLongText, originalLength: content.length, duration: `${attempts * 2}s` } 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

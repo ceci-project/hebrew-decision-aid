@@ -1,15 +1,16 @@
-
-// Updated: 2025-08-26 - Added Hebrew language requirement and improved prompts
+// Updated: 2025-08-26 - Enhanced for 24-32 insights and comprehensive text analysis
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-console.log('Loading secrets...');
+const VERSION = "OpenAI-Enhanced-v2025-08-26";
+
+console.log(`🚀 ${VERSION} - Loading secrets...`);
 
 // Try all possible secret names and log what we find
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY_SECRET') || Deno.env.get('openai_api_key');
 const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID') || Deno.env.get('OPENAI_PROJECT_ID_SECRET') || Deno.env.get('openai_project_id');
 
-console.log('Secrets loaded at startup:', {
+console.log(`${VERSION} - Secrets loaded at startup:`, {
   openaiKey: openAIApiKey ? `${openAIApiKey.substring(0, 8)}...` : 'MISSING',
   projectId: openAIProjectId ? `${openAIProjectId.substring(0, 8)}...` : 'MISSING',
   allEnvKeys: Object.keys(Deno.env.toObject()).filter(k => k.toLowerCase().includes('openai'))
@@ -36,30 +37,32 @@ const ALLOWED_CRITERIA = [
 ] as const;
 
 serve(async (req) => {
-  console.log('analyze-openai function started, method:', req.method, 'time:', new Date().toISOString());
+  console.log(`${VERSION} - Function started, method:`, req.method, 'time:', new Date().toISOString());
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    console.log('Handling CORS preflight for analyze-openai');
+    console.log(`${VERSION} - Handling CORS preflight`);
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('Parsing request body...');
-    const { content, maxInsights = 8 } = await req.json();
-    console.log('Request parsed - content length:', content?.length || 0, 'maxInsights:', maxInsights);
-
-    // Check secrets availability
-    console.log('Checking secrets availability...');
-
-    // Debug: Check environment variables first
-    console.log('Environment check (analyze-openai):', {
-      hasOpenaiKey: !!openAIApiKey,
-      openaiKeyLength: openAIApiKey?.length || 0,
+    console.log(`${VERSION} - Parsing request body...`);
+    const { content, maxInsights = 24 } = await req.json();
+    const isLongText = content && content.length > 4000;
+    const adjustedMaxInsights = isLongText ? Math.max(maxInsights, 32) : Math.max(maxInsights, 24);
+    
+    console.log(`${VERSION} - Request parsed:`, {
+      contentLength: content?.length || 0,
+      maxInsights,
+      adjustedMaxInsights,
+      isLongText
     });
 
+    // Check secrets availability
+    console.log(`${VERSION} - Checking secrets availability...`);
+
     if (!openAIApiKey) {
-      console.error('Missing OPENAI_API_KEY');
+      console.error(`${VERSION} - Missing OPENAI_API_KEY`);
       return new Response(
         JSON.stringify({ error: 'Missing OPENAI_API_KEY' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -73,11 +76,24 @@ serve(async (req) => {
       );
     }
 
-    const system = `אתה עוזר שמעריך החלטות ממשלתיות בעברית בלבד באמצעות רובריקה של 12 קריטריונים. תחזיר JSON בלבד.
+    const system = `אתה עוזר מומחה שמעריך החלטות ממשלתיות בעברית בלבד באמצעות רובריקה של 12 קריטריונים. 
 
-חזור אובייקט עם השדות: criteria[12], summary, insights[]. ראה את הסוגים המדויקים למטה.
+🔥 משימה קריטית: נתח את המסמך באופן מקיף ומלא!
+
+חזור אובייקט JSON עם השדות: criteria[12], summary, insights[${adjustedMaxInsights}]. 
 
 חובה: כל הטקסט בשדות explanation, suggestion, suggestion_primary, suggestion_secondary, justification, reasoning, name חייב להיות בעברית בלבד!
+
+🎯 דרישות מיוחדות לניתוח מקיף:
+${isLongText ? `
+- טקסט זה ארוך (${content.length} תווים) - חובה לנתח כל חלק!
+- פזר את ${adjustedMaxInsights} התובנות על פני כל הטקסט: תחילה (30%), אמצע (40%), סוף (30%)
+- וודא שאתה קורא ומנתח גם את החלקים האחרונים של המסמך
+- חפש תובנות ייחודיות מכל קטע של הטקסט
+` : `
+- נתח את המסמך באופן יסודי ומקיף
+- חפש ${adjustedMaxInsights} תובנות מפורטות
+`}
 
 {
   "criteria": Array<{
@@ -96,7 +112,7 @@ serve(async (req) => {
   "insights": Array<{
     "id": string,
     "criterionId": "timeline" | "integrator" | "reporting" | "evaluation" | "external_audit" | "resources" | "multi_levels" | "structure" | "field_implementation" | "arbitrator" | "cross_sector" | "outcomes",
-    "quote": string,
+    "quote": string,             // ציטוט קצר ומדויק (20-50 תווים)
     "explanation": string,        // בעברית בלבד - הסבר כללי על הבעיה או החוזקה
     "suggestion": string,         // בעברית בלבד - הצעה ראשונית קצרה
     "suggestion_primary": string, // בעברית בלבד - הצעה מפורטת ראשונית ומעשית
@@ -106,24 +122,26 @@ serve(async (req) => {
   }>
 }
 
-כללים:
-- כל הטקסט חייב להיות בעברית בלבד
-- ציטוטים חייבים להיות חלק מהתוכן
+כללים קריטיים:
+- כל הטקסט חייב להיות בעברית בלבד!
+- ציטוטים חייבים להיות חלק מהתוכן ומדויקים לחלוטין
 - rangeStart/rangeEnd הם אינדקסים [start,end) להופעה הראשונה; אם לא נמצא, קבע את שניהם ל-0
-- העדף ציטוטים קצרים (3-8 מילים)
-- פלט עברי כאשר רלוונטי; JSON בלבד, ללא markdown
-- הגבל insights לכל היותר ${maxInsights}
-- עבור כל insight, ספק גם suggestion_primary (המלצה עיקרית מעשית) וגם suggestion_secondary (גישה חלופית או משלימה)
-- כל התוכן בשדות הטקסט חייב להיות בעברית בלבד`;
+- העדף ציטוטים קצרים (20-50 תווים) ומדויקים
+- JSON בלבד, ללא markdown או טקסט נוסף
+- חובה לחזור עם בדיוק ${adjustedMaxInsights} insights
+- חלק את התובנות באופן שווה בין הקריטריונים השונים
+- וודא שכל קריטריון מקבל לפחות 2-3 insights
+- ${isLongText ? 'לטקסט ארוך זה - חובה לכלול תובנות מכל חלקי הטקסט!' : ''}`;
 
-    const user = `תוכן (עברית UTF-8 מותרת):\n"""${content}"""`;
+    const user = `${isLongText ? `טקסט ארוך לניתוח מקיף (${content.length} תווים):` : 'תוכן לניתוח:'}\n"""${content}"""`;
 
-    const model = 'gpt-4o';
+    const model = 'gpt-4o'; // Using legacy model for better compatibility
     
-    console.log('📤 Preparing OpenAI API call:', {
+    console.log(`📤 ${VERSION} - Preparing OpenAI API call:`, {
       model,
       contentLength: content.length,
-      maxInsights,
+      adjustedMaxInsights,
+      isLongText,
       timestamp: new Date().toISOString(),
       hasApiKey: !!openAIApiKey,
       hasProjectId: !!openAIProjectId
@@ -139,6 +157,8 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model,
+        max_tokens: isLongText ? 4000 : 3000, // More tokens for longer texts
+        temperature: 0.3, // Lower temperature for more consistent results
         response_format: {
           type: 'json_schema',
           json_schema: {
@@ -222,7 +242,7 @@ serve(async (req) => {
     });
 
     const requestDuration = Date.now() - requestStartTime;
-    console.log('📥 OpenAI API response received:', {
+    console.log(`📥 ${VERSION} - OpenAI API response received:`, {
       status: resp.status,
       statusText: resp.statusText,
       duration: `${requestDuration}ms`,
@@ -232,7 +252,7 @@ serve(async (req) => {
     let data = await resp.json();
     
     if (!resp.ok) {
-      console.error('❌ OpenAI API error response:', {
+      console.error(`❌ ${VERSION} - OpenAI API error response:`, {
         status: resp.status,
         error: data?.error?.message || 'Unknown error',
         type: data?.error?.type,
@@ -241,6 +261,7 @@ serve(async (req) => {
       const msg = String(data?.error?.message || '');
       const needsFallback = msg.toLowerCase().includes('response_format') || msg.toLowerCase().includes('json_schema');
       if (needsFallback) {
+        console.log(`🔄 ${VERSION} - Attempting fallback with json_object format`);
         const resp2 = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -250,6 +271,8 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             model,
+            max_tokens: isLongText ? 4000 : 3000,
+            temperature: 0.3,
             response_format: { type: 'json_object' },
             messages: [
               { role: 'system', content: system },
@@ -261,15 +284,16 @@ serve(async (req) => {
         if (resp2.ok) {
           resp = resp2;
           data = data2;
+          console.log(`✅ ${VERSION} - Fallback successful`);
         } else {
-          console.error('OpenAI error (fallback failed)', data2);
+          console.error(`${VERSION} - OpenAI error (fallback failed)`, data2);
           return new Response(
             JSON.stringify({ error: data2.error?.message || 'OpenAI error (fallback failed)' }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       } else {
-        console.error('OpenAI error', data);
+        console.error(`${VERSION} - OpenAI error`, data);
         return new Response(
           JSON.stringify({ error: data.error?.message || 'OpenAI error' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -282,6 +306,7 @@ serve(async (req) => {
     try {
       parsed = JSON.parse(text);
     } catch (_e) {
+      console.error(`${VERSION} - JSON parse failed, using fallback structure`);
       parsed = { insights: [], criteria: [], summary: null };
     }
 
@@ -357,7 +382,7 @@ serve(async (req) => {
           return {
             id: String(i?.id ?? `ai-${idx}`),
             criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
-            quote: String(i?.quote ?? ''),
+            quote: String(i?.quote ?? '').trim(),
             explanation: String(i?.explanation ?? ''),
             suggestion: basicSuggestion,
             suggestion_primary: String(i?.suggestion_primary ?? detailedSuggestions.primary),
@@ -376,25 +401,32 @@ serve(async (req) => {
           score: Math.max(0, Math.min(5, Number(c?.score) || 0)),
           justification: String(c?.justification ?? ''),
           evidence: Array.isArray(c?.evidence) ? c.evidence.map((e: any) => ({
-            quote: String(e?.quote ?? ''),
+            quote: String(e?.quote ?? '').trim(),
             rangeStart: Number.isFinite(e?.rangeStart) ? e.rangeStart : 0,
             rangeEnd: Number.isFinite(e?.rangeEnd) ? e.rangeEnd : 0,
           })) : [],
         }))
       : [];
 
-    // Synthesize insights from criteria evidence if missing
-    if ((!insights || insights.length === 0) && Array.isArray(criteria)) {
+    // Enhanced synthesis from criteria evidence if we don't have enough insights
+    if ((!insights || insights.length < Math.max(adjustedMaxInsights * 0.8, 20)) && Array.isArray(criteria)) {
+      console.log(`🔄 ${VERSION} - Synthesizing additional insights from criteria evidence to reach ${adjustedMaxInsights} total`);
       const synth: any[] = [];
+      const existingByCrit = new Set(insights.map((i) => i.criterionId));
+      
       for (const c of criteria) {
         if (Array.isArray(c.evidence) && c.evidence.length) {
-          for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
+          const evidenceToUse = existingByCrit.has(c.id) ? 
+            Math.min(c.evidence.length, 2) : 
+            Math.min(c.evidence.length, 3); // More evidence per missing criterion
+            
+          for (let k = 0; k < evidenceToUse; k++) {
             const e = c.evidence[k];
             const detailedSuggestions = generateDetailedSuggestions('', c.id);
             synth.push({
               id: `${c.id}-ev-${k}`,
               criterionId: c.id,
-              quote: String(e.quote || ''),
+              quote: String(e.quote || '').trim(),
               explanation: c.justification || `חיזוק: ${c.name}`,
               suggestion: `שפרו את הסעיף "${c.name}" בהתאם לרובריקה.`,
               suggestion_primary: detailedSuggestions.primary,
@@ -405,8 +437,10 @@ serve(async (req) => {
           }
         }
       }
+      
       if (synth.length) {
-        insights = synth.slice(0, maxInsights);
+        insights = [...insights, ...synth].slice(0, adjustedMaxInsights);
+        console.log(`✅ ${VERSION} - Added ${synth.length} synthesized insights, total: ${insights.length}`);
       }
     }
 
@@ -424,15 +458,37 @@ serve(async (req) => {
       summary = { feasibilityPercent: percent, feasibilityLevel: level, reasoning: summary?.reasoning || '' } as any;
     }
 
-    console.log('openai analysis counts', { insights: insights.length, criteria: criteria.length, summary: !!summary, model, withHebrewContent: true });
+    console.log(`${VERSION} - Analysis completed:`, { 
+      insights: insights.length, 
+      criteria: criteria.length, 
+      summary: !!summary, 
+      model, 
+      isLongText,
+      duration: `${requestDuration}ms`,
+      adjustedMaxInsights
+    });
+    
     return new Response(
-      JSON.stringify({ insights, criteria, summary, meta: { source: 'openai', model } }),
+      JSON.stringify({ 
+        insights, 
+        criteria, 
+        summary, 
+        meta: { 
+          source: 'openai', 
+          model, 
+          version: VERSION, 
+          isLongText, 
+          originalLength: content.length,
+          duration: `${requestDuration}ms`,
+          adjustedMaxInsights
+        } 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('analyze-openai error', error);
+    console.error(`${VERSION} - Fatal error:`, error);
     return new Response(
-      JSON.stringify({ error: 'Unexpected error' }),
+      JSON.stringify({ error: 'Unexpected error', version: VERSION }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
