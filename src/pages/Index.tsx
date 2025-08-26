@@ -149,6 +149,10 @@ const Index = () => {
     setContent(newContent);
   };
 
+  const handleInsightsChange = (newInsights: Insight[]) => {
+    setInsights(newInsights);
+  };
+
   const handleApplySuggestion = (suggestion: string) => {
     if (!selectedInsight) return;
     
@@ -230,9 +234,10 @@ const Index = () => {
                 <DecisionEditor
                   content={content}
                   insights={insights}
-                  onChange={handleContentChange}
-                  onInsightClick={handleInsightClick}
-                  className="min-h-[60vh]"
+                  onContentChange={handleContentChange}
+                  onInsightsChange={handleInsightsChange}
+                  onInsightSelect={handleInsightClick}
+                  selectedInsight={selectedInsight}
                 />
               ) : (
                 <textarea
