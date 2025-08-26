@@ -271,7 +271,6 @@ export const DecisionEditor: React.FC<Props> = ({
               highlight.addEventListener('click', (e) => {
                 e.stopPropagation();
                 onInsightSelect?.(span.insight);
-                selectTextRange(editor, span.start, span.end);
               });
               
               editor.appendChild(highlight);
