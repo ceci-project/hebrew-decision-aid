@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { storage } from "@/services/storage";
@@ -79,6 +80,7 @@ const EditorPage = () => {
     a.remove();
     URL.revokeObjectURL(url);
   };
+  
   const scrollToInsight = (ins: Insight) => {
     setTab("canvas");
     // Wait for tab to render before querying DOM
@@ -132,8 +134,6 @@ const EditorPage = () => {
       setTimeout(() => el.classList.remove("ring-2", "ring-primary/50", "transition-shadow"), 1300);
     });
   };
-  const short = (s?: string | null) => (s ? `${s.slice(0,6)}…${s.slice(-4)}` : "");
-
 
   if (!doc) return null;
 
@@ -227,87 +227,63 @@ const EditorPage = () => {
         </div>
 
         {/* Right Sidebar */}
-        <div className="w-80 bg-gray-50 border-l border-gray-200 p-6">
-          <div className="space-y-6">
-            {/* Quick Summary */}
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">סיכום מהיר</h3>
-              
-              {criteria.length > 0 ? (
-                <div className="space-y-3">
-                  {CRITERIA.map((criterion) => {
-                    const criterionData = criteria.find(c => c.id === criterion.id);
-                    const score = criterionData?.score ?? 0;
-                    const insightCount = insights.filter(ins => ins.criterionId === criterion.id).length;
-                    
-                    return (
-                      <div key={criterion.id} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: `var(${criterion.colorVar})` }}
-                          />
-                          <span className="text-sm text-gray-700">{criterion.name}:</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-medium text-gray-900">{insightCount}</span>
-                          {score > 0 && (
-                            <span className="text-xs text-gray-500">({score}/10)</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">אין נתונים להצגה - הריצו ניתוח</p>
-              )}
-            </div>
-
-            {/* Feasibility Score */}
-            {summary && (
-              <div className="border-t border-gray-200 pt-6">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">ציון כללי:</h4>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-gray-900 mb-1">
-                    {summary.feasibilityPercent}%
+        <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto max-h-screen">
+          <div className="p-6">
+            <div className="space-y-6">
+              {/* Feasibility Score */}
+              {summary && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">ציון כללי:</h4>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-gray-900 mb-1">
+                      {summary.feasibilityPercent}%
+                    </div>
+                    <div className="text-sm text-gray-500 mb-3">
+                      {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : 
+                       summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 
+                       'ישימות גבוהה'}
+                    </div>
+                    <Progress value={summary.feasibilityPercent} className="h-2" />
                   </div>
-                  <div className="text-sm text-gray-500 mb-3">
-                    {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : 
-                     summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 
-                     'ישימות גבוהה'}
-                  </div>
-                  <Progress value={summary.feasibilityPercent} className="h-2" />
-                </div>
-                
-                {summary.reasoning && (
-                  <p className="mt-4 text-xs text-gray-600 leading-relaxed">
-                    {summary.reasoning}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Analysis Meta */}
-            {meta && (
-              <div className="border-t border-gray-200 pt-4">
-                <div className="text-xs text-gray-500">
-                  {meta.source === 'assistants' ? (
-                    <span>
-                      מופעל ע״י OpenAI Assistant
-                      {meta.model ? ` • ${meta.model}` : ''}
-                    </span>
-                  ) : meta.source === 'openai' ? (
-                    <span>
-                      מופעל ע״י OpenAI
-                      {meta.model ? ` • ${meta.model}` : ''}
-                    </span>
-                  ) : (
-                    <span>מופעל ע״י ניתוח מקומי</span>
+                  
+                  {summary.reasoning && (
+                    <p className="mt-4 text-xs text-gray-600 leading-relaxed">
+                      {summary.reasoning}
+                    </p>
                   )}
                 </div>
+              )}
+
+              {/* Detailed Criterion Analysis */}
+              <div className="border-t border-gray-200 pt-6">
+                <CriterionAccordion 
+                  criteriaData={criteria} 
+                  insights={insights} 
+                  onJump={scrollToInsight} 
+                />
               </div>
-            )}
+
+              {/* Analysis Meta */}
+              {meta && (
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="text-xs text-gray-500">
+                    {meta.source === 'assistants' ? (
+                      <span>
+                        מופעל ע״י OpenAI Assistant
+                        {meta.model ? ` • ${meta.model}` : ''}
+                      </span>
+                    ) : meta.source === 'openai' ? (
+                      <span>
+                        מופעל ע״י OpenAI
+                        {meta.model ? ` • ${meta.model}` : ''}
+                      </span>
+                    ) : (
+                      <span>מופעל ע״י ניתוח מקומי</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
