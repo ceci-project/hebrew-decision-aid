@@ -1,5 +1,5 @@
 
-// Updated: 2025-08-26 - Added support for suggestion_primary and suggestion_secondary fields
+// Updated: 2025-08-26 - Added Hebrew language requirement and improved prompts
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -73,43 +73,50 @@ serve(async (req) => {
       );
     }
 
-    const system = `You are an assistant that evaluates Hebrew government decisions using a fixed 12-criteria rubric. Output JSON ONLY.
-Return an object with fields: criteria[12], summary, insights[]. See the exact types below.
+    const system = `אתה עוזר שמעריך החלטות ממשלתיות בעברית בלבד באמצעות רובריקה של 12 קריטריונים. תחזיר JSON בלבד.
+
+חזור אובייקט עם השדות: criteria[12], summary, insights[]. ראה את הסוגים המדויקים למטה.
+
+חובה: כל הטקסט בשדות explanation, suggestion, suggestion_primary, suggestion_secondary, justification, reasoning, name חייב להיות בעברית בלבד!
+
 {
   "criteria": Array<{
     "id": "timeline" | "integrator" | "reporting" | "evaluation" | "external_audit" | "resources" | "multi_levels" | "structure" | "field_implementation" | "arbitrator" | "cross_sector" | "outcomes",
-    "name": string,
+    "name": string,              // בעברית בלבד
     "weight": number,            // percentage 0-100 matching the rubric weights
     "score": number,             // integer 0-5
-    "justification": string,
+    "justification": string,     // בעברית בלבד
     "evidence"?: Array<{ "quote": string, "rangeStart": number, "rangeEnd": number }>
   }>,
   "summary": {
     "feasibilityPercent": number,           // 0-100 weighted by the 12 criteria
     "feasibilityLevel": "low" | "medium" | "high", // 0-49 low, 50-74 medium, 75-100 high
-    "reasoning": string
+    "reasoning": string                     // בעברית בלבד
   },
   "insights": Array<{
     "id": string,
     "criterionId": "timeline" | "integrator" | "reporting" | "evaluation" | "external_audit" | "resources" | "multi_levels" | "structure" | "field_implementation" | "arbitrator" | "cross_sector" | "outcomes",
     "quote": string,
-    "explanation": string,
-    "suggestion": string,
-    "suggestion_primary": string,    // Primary improvement suggestion - actionable and specific
-    "suggestion_secondary": string,  // Secondary/alternative improvement suggestion
+    "explanation": string,        // בעברית בלבד - הסבר כללי על הבעיה או החוזקה
+    "suggestion": string,         // בעברית בלבד - הצעה ראשונית קצרה
+    "suggestion_primary": string, // בעברית בלבד - הצעה מפורטת ראשונית ומעשית
+    "suggestion_secondary": string,  // בעברית בלבד - הצעה חלופית או משלימה
     "rangeStart": number,
     "rangeEnd": number
   }>
 }
-Rules:
-- Quotes MUST be substrings of the content.
-- rangeStart/rangeEnd are [start,end) offsets for the first occurrence; if not found, set both to 0.
-- Prefer short quotes (3–8 words).
-- Hebrew output where relevant; JSON only, no markdown fences.
-- Keep insights to at most ${maxInsights}.
-- For each insight, provide both suggestion_primary (main actionable recommendation) and suggestion_secondary (alternative or complementary approach).`;
 
-    const user = `Content (UTF-8 Hebrew allowed):\n"""${content}"""`;
+כללים:
+- כל הטקסט חייב להיות בעברית בלבד
+- ציטוטים חייבים להיות חלק מהתוכן
+- rangeStart/rangeEnd הם אינדקסים [start,end) להופעה הראשונה; אם לא נמצא, קבע את שניהם ל-0
+- העדף ציטוטים קצרים (3-8 מילים)
+- פלט עברי כאשר רלוונטי; JSON בלבד, ללא markdown
+- הגבל insights לכל היותר ${maxInsights}
+- עבור כל insight, ספק גם suggestion_primary (המלצה עיקרית מעשית) וגם suggestion_secondary (גישה חלופית או משלימה)
+- כל התוכן בשדות הטקסט חייב להיות בעברית בלבד`;
+
+    const user = `תוכן (עברית UTF-8 מותרת):\n"""${content}"""`;
 
     const model = 'gpt-4o';
     
@@ -282,58 +289,58 @@ Rules:
     const generateDetailedSuggestions = (basicSuggestion: string, criterionId: string) => {
       const suggestions: Record<string, { primary: string; secondary: string }> = {
         timeline: {
-          primary: "הוסיפו לוח זמנים מפורט עם תאריכי יעד ברורים ומנגנון אכיפה.",
-          secondary: "הגדירו אבני דרך ביניים עם נקודות בקרה וסנקציות באי-עמידה."
+          primary: "הוסיפו לוח זמנים מפורט עם תאריכי יעד ברורים ומנגנון אכיפה מחייב.",
+          secondary: "הגדירו אבני דרך ביניים עם נקודות בקרה וסנקציות באי-עמידה בלוחות הזמנים."
         },
         integrator: {
           primary: "הקימו צוות מתכלל עם הרכב ברור, סמכויות מוגדרות ותדירות ישיבות קבועה.",
-          secondary: "מנו רכז תיאום עליון עם סמכות להכריע בחילוקי דעות בין הגורמים."
+          secondary: "מנו רכז תיאום עליון עם סמכות להכריע בחילוקי דעות בין הגורמים השונים."
         },
         reporting: {
           primary: "קבעו מנגנון דיווח סדור: תדירות, פורמט סטנדרטי וטיפול בחריגות.",
-          secondary: "הקימו מערכת מעקב דיגיטלית עם התרעות אוטומטיות ודשבורד מנהלים."
+          secondary: "הקימו מערכת מעקב דיגיטלית עם התרעות אוטומטיות ודשבורד מנהלים מעודכן."
         },
         evaluation: {
-          primary: "הגדירו מדדי הצלחה כמותיים ואיכותיים עם שיטת הערכה מחזורית.",
-          secondary: "הקימו ועדת הערכה חיצונית עם מנדט ברור ותקציב ייעודי."
+          primary: "הגדירו מדדי הצלחה כמותיים ואיכותיים עם שיטת הערכה מחזורית קבועה.",
+          secondary: "הקימו ועדת הערכה חיצונית עם מנדט ברור ותקציב ייעודי להערכה עצמאית."
         },
         external_audit: {
           primary: "קבעו ביקורת חיצונית שנתית עם חובת פרסום ממצאים ותגובת ההנהלה.",
-          secondary: "הטמיעו מנגנון ביקורת עמיתים (peer review) עם גורמים מקצועיים חיצוניים."
+          secondary: "הטמיעו מנגנון ביקורת עמיתים עם גורמים מקצועיים חיצוניים ובלתי תלויים."
         },
         resources: {
-          primary: "פרטו את התקציב הנדרש, מקורות המימון והכוח האדם הייעודי.",
+          primary: "פרטו את התקציב הנדרש, מקורות המימון והכוח האדם הייעודי הנדרש.",
           secondary: "הכינו תוכנית גיוס משאבים חלופית ומנגנון לעדכון תקציבי בזמן אמת."
         },
         multi_levels: {
-          primary: "הבהירו את חלוקת האחריות בין הדרגים ומנגנוני התיאום הנדרשים.",
-          secondary: "הקימו מועצת תיאום עליונה עם נציגות מכל הרמות הרלוונטיות."
+          primary: "הבהירו את חלוקת האחריות בין הדרגים ומנגנוני התיאום הנדרשים ביניהם.",
+          secondary: "הקימו מועצת תיאום עליונה עם נציגות מכל הרמות הרלוונטיות וסמכות החלטה."
         },
         structure: {
           primary: "חלקו את התוכנית למשימות ברורות עם בעלי תפקידים ואבני דרך מוגדרות.",
-          secondary: "יצרו מטריצת אחריות (RACI) מפורטת לכל משימה ופעילות."
+          secondary: "יצרו מטריצת אחריות מפורטת לכל משימה ופעילות עם הגדרת ממשקים ברורה."
         },
         field_implementation: {
           primary: "תארו בפירוט את היישום בשטח: מי מבצע, איך, עם אילו סמכויות ופיקוח.",
-          secondary: "הכינו מדריך יישום מעשי עם תרחישים, כלים ונהלי פתרון בעיות."
+          secondary: "הכינו מדריך יישום מעשי עם תרחישים, כלים ונהלי פתרון בעיות בשטח."
         },
         arbitrator: {
-          primary: "מנו גורם מכריע ברור עם SLA מוגדר לקבלת החלטות וסמכות אכיפה.",
-          secondary: "הקימו מנגנון בוררות פנימי עם נהלים ברורים לטיפול בסכסוכים."
+          primary: "מנו גורם מכריע ברור עם זמן תגובה מוגדר לקבלת החלטות וסמכות אכיפה.",
+          secondary: "הקימו מנגנון בוררות פנימי עם נהלים ברורים לטיפול בסכסוכים ובעיות."
         },
         cross_sector: {
-          primary: "שלבו בעלי עניין רלוונטיים ותיאום בין-משרדי עם מנגנוני שיתוף פעולה.",
-          secondary: "הקימו פורום רב-מגזרי עם מנדט ברור ותקציב לפעילות משותפת."
+          primary: "שלבו בעלי עניין רלוונטיים ותיאום בין-משרדי עם מנגנוני שיתוף פעולה מוגדרים.",
+          secondary: "הקימו פורום רב-מגזרי עם מנדט ברור ותקציב ייעודי לפעילות משותפת."
         },
         outcomes: {
-          primary: "הגדירו מדדי תוצאה ברורים עם יעדים כמותיים ולוחות זמנים למימוש.",
-          secondary: "פתחו מערכת מעקב אחר השפעה ארוכת טווח עם הערכה תקופתית."
+          primary: "הגדירו מדדי תוצאה ברורים עם יעדים כמותיים ולוחות זמנים למימוש התוצאות.",
+          secondary: "פתחו מערכת מעקב אחר השפעה ארוכת טווח עם הערכה תקופתית של התוצאות."
         }
       };
 
       const defaultSuggestions = suggestions[criterionId as keyof typeof suggestions] || {
         primary: basicSuggestion || "שפרו את הסעיף בהתאם לרובריקה.",
-        secondary: "הוסיפו מנגנוני בקרה ומעקב נוספים."
+        secondary: "הוסיפו מנגנוני בקרה ומעקב נוספים לשיפור הביצוע."
       };
 
       return {
@@ -417,7 +424,7 @@ Rules:
       summary = { feasibilityPercent: percent, feasibilityLevel: level, reasoning: summary?.reasoning || '' } as any;
     }
 
-    console.log('openai analysis counts', { insights: insights.length, criteria: criteria.length, summary: !!summary, model, withDetailedSuggestions: true });
+    console.log('openai analysis counts', { insights: insights.length, criteria: criteria.length, summary: !!summary, model, withHebrewContent: true });
     return new Response(
       JSON.stringify({ insights, criteria, summary, meta: { source: 'openai', model } }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

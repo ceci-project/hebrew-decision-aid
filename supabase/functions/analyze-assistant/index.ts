@@ -1,7 +1,8 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const VERSION = "AssistantPath v2025-08-26-C";
+const VERSION = "AssistantPath v2025-08-26-D-Hebrew";
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
 const assistantId = Deno.env.get('ASSISTANT_ID');
@@ -70,21 +71,15 @@ serve(async (req) => {
     try {
       console.log(`🔄 ${VERSION} - Step 1: Creating thread`);
       
-      // Prepare headers - only include OpenAI-Organization if we have a project ID
+      // Prepare headers - don't include OpenAI-Organization header to avoid the mismatch error
       const headers: Record<string, string> = {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
         'OpenAI-Beta': 'assistants=v2',
       };
       
-      // Only add OpenAI-Organization header if we have a project ID
-      // This fixes the "OpenAI-Organization header should match organization for API key" error
-      if (openAIProjectId && openAIProjectId.trim()) {
-        headers['OpenAI-Organization'] = openAIProjectId;
-        console.log(`🔧 ${VERSION} - Using OpenAI-Organization header: ${openAIProjectId}`);
-      } else {
-        console.log(`⚠️ ${VERSION} - No OpenAI Project ID provided, skipping OpenAI-Organization header`);
-      }
+      // Don't add OpenAI-Organization header to avoid the mismatch error
+      console.log(`🔧 ${VERSION} - Using headers without OpenAI-Organization to avoid mismatch error`);
 
       // Step 1: Create a thread
       const threadResponse = await fetch('https://api.openai.com/v1/threads', {
@@ -111,13 +106,17 @@ serve(async (req) => {
         headers,
         body: JSON.stringify({
           role: 'user',
-          content: `נתח את המסמך הממשלתי הבא ותן ביקורת על פי רובריקת 12 הקריטריונים. 
+          content: `נתח את המסמך הממשלתי הבא ותן ביקורת על פי רובריקת 12 הקריטריונים.
+
+חשוב מאוד: כל התוכן חייב להיות בעברית בלבד!
 
 עבור כל insight, כלול:
-- explanation: הסבר כללי מה הבעיה או החוזקה
-- suggestion: הצעה ראשונית קצרה לשיפור
-- suggestion_primary: הצעה מפורטת ראשונית (50-100 מילים)
-- suggestion_secondary: הצעה חלופית או משלימה (50-100 מילים)
+- explanation: הסבר כללי בעברית מה הבעיה או החוזקה
+- suggestion: הצעה ראשונית קצרה לשיפור בעברית
+- suggestion_primary: הצעה מפורטת ראשונית בעברית (50-100 מילים)
+- suggestion_secondary: הצעה חלופית או משלימה בעברית (50-100 מילים)
+
+כל השדות הטקסטואליים חייבים להיות בעברית בלבד: explanation, suggestion, suggestion_primary, suggestion_secondary, justification, reasoning, name.
 
 תוכן המסמך:
 """
@@ -126,12 +125,14 @@ ${truncatedContent}
 
 החזר רק JSON עם המבנה הבא:
 {
-  "criteria": [12 קריטריונים עם id, name, weight, score, justification, evidence],
-  "summary": { "feasibilityPercent": מספר, "feasibilityLevel": "low/medium/high", "reasoning": הסבר },
-  "insights": [תובנות עם id, criterionId, quote, explanation, suggestion, suggestion_primary, suggestion_secondary, rangeStart, rangeEnd]
+  "criteria": [12 קריטריונים עם id, name (בעברית), weight, score, justification (בעברית), evidence],
+  "summary": { "feasibilityPercent": מספר, "feasibilityLevel": "low/medium/high", "reasoning": "הסבר בעברית" },
+  "insights": [תובנות עם id, criterionId, quote, explanation (בעברית), suggestion (בעברית), suggestion_primary (בעברית), suggestion_secondary (בעברית), rangeStart, rangeEnd]
 }
 
-מגבל insights ל-${maxInsights} פריטים.`,
+מגבל insights ל-${maxInsights} פריטים.
+
+זכור: כל הטקסט חייב להיות בעברית בלבד!`,
         }),
         signal: controller.signal,
       });
@@ -321,6 +322,7 @@ ${truncatedContent}
         hasSuggestion: !!insights[0].suggestion,
         hasPrimary: !!insights[0].suggestion_primary,
         hasSecondary: !!insights[0].suggestion_secondary,
+        isHebrew: /[\u0590-\u05FF]/.test(insights[0].explanation || '')
       } : 'No insights');
 
       return new Response(
@@ -348,7 +350,7 @@ ${truncatedContent}
   }
 });
 
-// Helper function to provide default suggestions for each criterion
+// Helper function to provide default suggestions for each criterion in Hebrew
 function getDefaultSuggestions(criterionId: string): { primary: string; secondary: string } {
   const suggestions: Record<string, { primary: string; secondary: string }> = {
     timeline: {
@@ -361,7 +363,7 @@ function getDefaultSuggestions(criterionId: string): { primary: string; secondar
     },
     reporting: {
       primary: "קבעו מנגנון דיווח סדיר: תדירות, פורמט סטנדרטי וטיפול בחריגות.",
-      secondary: "הקימו מערכת מחוונים (KPIs) למעקב אחר התקדמות והישגים."
+      secondary: "הקימו מערכת מחוונים למעקב אחר התקדמות והישגים."
     },
     evaluation: {
       primary: "הוסיפו מדדים כמותיים ושיטת הערכה המבוצעת באופן מחזורי.",
@@ -388,7 +390,7 @@ function getDefaultSuggestions(criterionId: string): { primary: string; secondar
       secondary: "הקימו מערכת הכשרה ותמיכה למבצעים בשטח עם כלים מעשיים."
     },
     arbitrator: {
-      primary: "מנו גורם מכריע עם SLA ברור לקבלת החלטות וחסימות.",
+      primary: "מנו גורם מכריע עם זמן תגובה ברור לקבלת החלטות וחסימות.",
       secondary: "הגדירו נהלי הסלמה וקבלת החלטות במקרים מורכבים או חריגים."
     },
     cross_sector: {
