@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { storage } from "@/services/storage";
@@ -34,6 +33,8 @@ const EditorPage = () => {
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  const UI_VERSION = "App v2025-08-26-UI-2";
+
   useEffect(() => {
     if (!doc) {
       toast({ title: "מסמך לא נמצא", description: "חזרה למסך הבית" });
@@ -49,15 +50,18 @@ const EditorPage = () => {
     }
     setLoading(true);
     try {
-      console.log('🚀 Starting analysis for document:', doc.title);
+      console.log(`🚀 ${UI_VERSION} - Starting analysis for document:`, doc.title);
+      console.log(`📊 ${UI_VERSION} - Document content length:`, doc.content.length);
+      
       const result: any = await analyzeDocument(doc.content);
-      console.log('📊 Analysis result received:', {
+      console.log(`📊 ${UI_VERSION} - Analysis result received:`, {
         hasInsights: Array.isArray(result) || Array.isArray(result?.insights),
         insightsCount: Array.isArray(result) ? result.length : (result?.insights?.length || 0),
         hasCriteria: Array.isArray(result?.criteria),
         criteriaCount: result?.criteria?.length || 0,
         hasSummary: !!result?.summary,
         meta: result?.meta,
+        version: result?.meta?.version || 'unknown',
         sampleInsight: (Array.isArray(result) ? result[0] : result?.insights?.[0]) ? {
           id: (Array.isArray(result) ? result[0] : result?.insights?.[0]).id,
           suggestion: (Array.isArray(result) ? result[0] : result?.insights?.[0]).suggestion,
@@ -70,12 +74,15 @@ const EditorPage = () => {
         ? (result as Insight[])
         : (result?.insights ?? []);
       
-      console.log('🔍 Processed insights:', ins.map(i => ({
+      console.log(`🔍 ${UI_VERSION} - Processed insights:`, ins.map(i => ({
         id: i.id,
         criterionId: i.criterionId,
         hasSuggestion: !!i.suggestion,
         hasPrimary: !!i.suggestion_primary,
-        hasSecondary: !!i.suggestion_secondary
+        hasSecondary: !!i.suggestion_secondary,
+        suggestionLength: i.suggestion?.length || 0,
+        primaryLength: i.suggestion_primary?.length || 0,
+        secondaryLength: i.suggestion_secondary?.length || 0,
       })));
       
       setInsights(ins);
@@ -85,7 +92,7 @@ const EditorPage = () => {
       storage.saveInsights(doc.id, ins);
       toast({ title: "הניתוח הושלם", description: "הודגשים והערות עודכנו" });
     } catch (e) {
-      console.error('❌ Analysis failed:', e);
+      console.error(`❌ ${UI_VERSION} - Analysis failed:`, e);
       toast({ title: "שגיאה בניתוח", description: String(e) });
     } finally {
       setLoading(false);
@@ -188,11 +195,8 @@ const EditorPage = () => {
             <Button onClick={onExportDocx} variant="outline" size="sm">
               יציאת DOCX
             </Button>
-            <Button onClick={onReanalyze} disabled={loading} variant="outline" size="sm">
-              {loading ? "מתחת..." : "מתחת..."}
-            </Button>
             <Button onClick={onReanalyze} disabled={loading} variant="default" size="sm">
-              {loading ? "ניתוח מחדש" : "ניתוח מחדש"}
+              {loading ? "מנתח..." : "ניתוח מחדש"}
             </Button>
           </div>
         </div>
@@ -208,16 +212,6 @@ const EditorPage = () => {
                 <h2 className="text-xl font-medium text-gray-900">עריכת המסמך</h2>
                 <span className="text-sm text-gray-500">{doc.title}</span>
               </div>
-              
-              {summary && (
-                <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="text-sm text-blue-800">
-                    <strong>ניתוח מחדש</strong>
-                    <br />
-                    לחץ כדי לנתח מחדש את המסמך עם השינויים שביצעת
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Word Count */}
@@ -256,20 +250,34 @@ const EditorPage = () => {
         <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto max-h-screen">
           <div className="p-6">
             <div className="space-y-6">
-              {/* Debug Panel */}
+              {/* Version Info */}
+              <div className="bg-blue-50 p-3 rounded border text-xs">
+                <div className="font-semibold mb-2">🔧 Version Info:</div>
+                <div>UI: {UI_VERSION}</div>
+                <div>Backend: {meta?.version || 'unknown'}</div>
+                <div>Source: {meta?.source || 'N/A'}</div>
+              </div>
+
+              {/* Enhanced Debug Panel */}
               <div className="bg-gray-50 p-3 rounded border text-xs">
                 <div className="font-semibold mb-2">🐛 Debug Info:</div>
                 <div>Insights: {insights.length}</div>
                 <div>Criteria: {criteria.length}</div>
                 <div>Summary: {summary ? '✓' : '✗'}</div>
                 <div>Meta source: {meta?.source || 'N/A'}</div>
+                <div>Meta version: {meta?.version || 'N/A'}</div>
                 {insights[0] && (
                   <div className="mt-2 p-2 bg-white rounded border">
                     <div className="font-medium">Sample Insight:</div>
                     <div>ID: {insights[0].id}</div>
-                    <div>suggestion: {insights[0].suggestion ? '✓' : '✗'}</div>
-                    <div>suggestion_primary: {insights[0].suggestion_primary ? '✓' : '✗'}</div>
-                    <div>suggestion_secondary: {insights[0].suggestion_secondary ? '✓' : '✗'}</div>
+                    <div>suggestion: {insights[0].suggestion ? `✓ (${insights[0].suggestion.length} chars)` : '✗'}</div>
+                    <div>suggestion_primary: {insights[0].suggestion_primary ? `✓ (${insights[0].suggestion_primary.length} chars)` : '✗'}</div>
+                    <div>suggestion_secondary: {insights[0].suggestion_secondary ? `✓ (${insights[0].suggestion_secondary.length} chars)` : '✗'}</div>
+                    {insights[0].suggestion_primary && (
+                      <div className="mt-1 text-xs text-gray-600 max-h-16 overflow-y-auto">
+                        <strong>Primary:</strong> {insights[0].suggestion_primary.substring(0, 100)}...
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -306,28 +314,12 @@ const EditorPage = () => {
                   onJump={scrollToInsight} 
                 />
               </div>
-
-              {/* Analysis Meta */}
-              {meta && (
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="text-xs text-gray-500">
-                    {meta.source === 'assistants' ? (
-                      <span>
-                        מופעל ע״י OpenAI Assistant
-                        {meta.model ? ` • ${meta.model}` : ''}
-                      </span>
-                    ) : meta.source === 'openai' ? (
-                      <span>
-                        מופעל ע״י OpenAI
-                        {meta.model ? ` • ${meta.model}` : ''}
-                      </span>
-                    ) : (
-                      <span>מופעל ע״י ניתוח מקומי</span>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
+          </div>
+
+          {/* Footer with version */}
+          <div className="border-t border-gray-200 p-4 text-center text-xs text-gray-500">
+            {UI_VERSION}
           </div>
         </div>
       </div>
