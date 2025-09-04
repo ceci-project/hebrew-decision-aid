@@ -6,8 +6,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 console.log('Loading secrets...');
 
 // Try all possible secret names and log what we find
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY_SECRET') || Deno.env.get('openai_api_key');
-const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID') || Deno.env.get('OPENAI_PROJECT_ID_SECRET') || Deno.env.get('openai_project_id');
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('VITE_OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY_SECRET') || Deno.env.get('openai_api_key');
+const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID') || Deno.env.get('VITE_OPENAI_PROJECT_ID') || Deno.env.get('DECISION_AID_OPENAI_PROJECT_ID') || Deno.env.get('OPENAI_PROJECT_ID_SECRET') || Deno.env.get('openai_project_id');
 
 console.log('Secrets loaded at startup:', {
   openaiKey: openAIApiKey ? `${openAIApiKey.substring(0, 8)}...` : 'MISSING',
@@ -75,6 +75,16 @@ serve(async (req) => {
 
     const system = `אתה עוזר שמעריך החלטות ממשלתיות בעברית בלבד באמצעות רובריקה של 12 קריטריונים. תחזיר JSON בלבד.
 
+חשוב מאוד - מערכת הניקוד לכל קריטריון (חובה 0-5):
+- ציון 0 = אין התייחסות כלל לקריטריון בטקסט ההחלטה
+- ציון 1 = התייחסות מינימלית או רמיזה בלבד לקריטריון
+- ציון 2 = התייחסות חלקית עם חוסרים משמעותיים
+- ציון 3 = התייחסות בינונית עם כמה פרטים חסרים
+- ציון 4 = התייחסות טובה עם רוב הפרטים הנדרשים
+- ציון 5 = התייחסות מצוינת ומקיפה עם כל הפרטים הנדרשים
+
+חובה: תן ציון 0 לכל קריטריון שלא מוזכר או לא רלוונטי בטקסט!
+
 חזור אובייקט עם השדות: criteria[12], summary, insights[]. ראה את הסוגים המדויקים למטה.
 
 חובה: כל הטקסט בשדות explanation, suggestion, suggestion_primary, suggestion_secondary, justification, reasoning, name חייב להיות בעברית בלבד!
@@ -84,8 +94,8 @@ serve(async (req) => {
     "id": "timeline" | "integrator" | "reporting" | "evaluation" | "external_audit" | "resources" | "multi_levels" | "structure" | "field_implementation" | "arbitrator" | "cross_sector" | "outcomes",
     "name": string,              // בעברית בלבד
     "weight": number,            // percentage 0-100 matching the rubric weights
-    "score": number,             // integer 0-5
-    "justification": string,     // בעברית בלבד
+    "score": number,             // חובה: integer 0-5 לפי הרובריקה למעלה
+    "justification": string,     // הסבר בעברית למה ניתן הציון הספציפי הזה
     "evidence"?: Array<{ "quote": string, "rangeStart": number, "rangeEnd": number }>
   }>,
   "summary": {

@@ -7,6 +7,7 @@ export const CRITERIA: Criterion[] = [
     name: "לוח זמנים מחייב",
     description: "הגדרת תאריכים מחייבים, חלונות זמן ו-SLA לחריגות",
     colorVar: "--crit-timeline",
+    weight: 17,
   },
   {
     id: "integrator",
@@ -14,6 +15,7 @@ export const CRITERIA: Criterion[] = [
     name: "צוות מתכלל",
     description: "קיום גוף מוביל, הרכב, סמכויות, תדירות והסרת חסמים",
     colorVar: "--crit-integrator",
+    weight: 10,
   },
   {
     id: "reporting",
@@ -21,6 +23,7 @@ export const CRITERIA: Criterion[] = [
     name: "מנגנון דיווח/בקרה",
     description: "יעדי דיווח, תדירות, פורמט, וטיפול בסטיות",
     colorVar: "--crit-reporting",
+    weight: 9,
   },
   {
     id: "evaluation",
@@ -28,6 +31,7 @@ export const CRITERIA: Criterion[] = [
     name: "מדידה והערכה",
     description: "מדדים, מתודולוגיה, גוף מבצע, תדירות ושימוש בתובנות",
     colorVar: "--crit-evaluation",
+    weight: 7,
   },
   {
     id: "external_audit",
@@ -35,6 +39,7 @@ export const CRITERIA: Criterion[] = [
     name: "ביקורת חיצונית",
     description: "גוף חיצוני, מועד, חובת פרסום וסטטוס מחייב",
     colorVar: "--crit-external-audit",
+    weight: 4,
   },
   {
     id: "resources",
@@ -42,6 +47,7 @@ export const CRITERIA: Criterion[] = [
     name: "משאבים נדרשים",
     description: "סכומים, מקורות, חלוקה, כוח אדם והתניות תקציב",
     colorVar: "--crit-resources",
+    weight: 19,
   },
   {
     id: "multi_levels",
@@ -49,6 +55,7 @@ export const CRITERIA: Criterion[] = [
     name: "מעורבות מספר דרגים",
     description: "פירוט מדיני/מקצועי/ביצועי ונהלי תיאום",
     colorVar: "--crit-multi-levels",
+    weight: 7,
   },
   {
     id: "structure",
@@ -56,6 +63,7 @@ export const CRITERIA: Criterion[] = [
     name: "מבנה סעיפים וחלוקת עבודה",
     description: "אחריות ברורה ואבני דרך",
     colorVar: "--crit-structure",
+    weight: 9,
   },
   {
     id: "field_implementation",
@@ -63,6 +71,7 @@ export const CRITERIA: Criterion[] = [
     name: "יישום בשטח",
     description: "מי/איך/סמכויות/פיקוח/מסגרת התקשרות",
     colorVar: "--crit-field-implementation",
+    weight: 9,
   },
   {
     id: "arbitrator",
@@ -70,6 +79,7 @@ export const CRITERIA: Criterion[] = [
     name: "גורם מכריע",
     description: "זהות המכריע, SLA להכרעה וחומרי רקע",
     colorVar: "--crit-arbitrator",
+    weight: 3,
   },
   {
     id: "cross_sector",
@@ -77,6 +87,7 @@ export const CRITERIA: Criterion[] = [
     name: "שותפות בין‑מגזרית",
     description: "מי/מתי/למה ומנגנון שיתוף ציבור",
     colorVar: "--crit-cross-sector",
+    weight: 3,
   },
   {
     id: "outcomes",
@@ -84,6 +95,7 @@ export const CRITERIA: Criterion[] = [
     name: "מדדי תוצאה והצלחה",
     description: "יעד מספרי/זמן/שיטת מדידה/ספי הצלחה",
     colorVar: "--crit-outcomes",
+    weight: 3,
   },
 ];
 

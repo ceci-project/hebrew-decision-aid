@@ -13,11 +13,23 @@ export interface Criterion {
   name: string;
   description: string;
   colorVar: string; // CSS variable name, e.g., --crit-legal
+  weight: number; // Weight percentage for the criterion
+}
+
+export interface Quote {
+  text: string;
+  rangeStart: number;
+  rangeEnd: number;
+  prefix?: string; // Text before the quote for re-anchoring
+  suffix?: string; // Text after the quote for re-anchoring
 }
 
 export interface Insight {
   id: string;
   criterionId: string;
+  // Support for multiple quotes - new primary field
+  quotes?: Quote[];
+  // Legacy single quote fields - maintained for backward compatibility
   quote: string;
   explanation: string;
   suggestion: string;

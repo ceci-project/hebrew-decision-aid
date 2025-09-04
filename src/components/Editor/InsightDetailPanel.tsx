@@ -8,13 +8,11 @@ import { Separator } from '@/components/ui/separator';
 
 interface Props {
   insight: Insight | null;
-  onApplySuggestion?: (suggestion: string) => void;
   onClose?: () => void;
 }
 
 export const InsightDetailPanel: React.FC<Props> = ({
   insight,
-  onApplySuggestion,
   onClose
 }) => {
   if (!insight) {
@@ -39,7 +37,7 @@ export const InsightDetailPanel: React.FC<Props> = ({
   ].filter(Boolean);
 
   return (
-    <div className="p-6 space-y-6 max-h-full overflow-y-auto">
+    <div className="insight-detail-panel p-6 space-y-6 max-h-full overflow-y-auto" role="region" aria-label="Insight details">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -73,15 +71,36 @@ export const InsightDetailPanel: React.FC<Props> = ({
         )}
       </div>
 
-      {/* Quote */}
+      {/* Quotes - support multiple */}
       <div>
-        <h4 className="text-sm font-medium text-gray-700 mb-2">הציטוט:</h4>
-        <div 
-          className="p-3 rounded border-l-4 bg-gray-50 text-sm"
-          style={{ borderLeftColor: `hsl(var(${criterion.colorVar}))` }}
-        >
-          "{insight.quote}"
-        </div>
+        <h4 className="text-sm font-medium text-gray-700 mb-2">
+          {insight.quotes && insight.quotes.length > 1 
+            ? `ציטוטים (${insight.quotes.length}):` 
+            : 'הציטוט:'}
+        </h4>
+        {insight.quotes && insight.quotes.length > 0 ? (
+          <div className="space-y-2">
+            {insight.quotes.map((quote, index) => (
+              <div 
+                key={index}
+                className="p-3 rounded border-l-4 bg-gray-50 text-sm"
+                style={{ borderLeftColor: `hsl(var(${criterion.colorVar}))` }}
+              >
+                {insight.quotes!.length > 1 && (
+                  <div className="text-xs text-gray-500 mb-1">ציטוט {index + 1}:</div>
+                )}
+                "{quote.text}"
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div 
+            className="p-3 rounded border-l-4 bg-gray-50 text-sm"
+            style={{ borderLeftColor: `hsl(var(${criterion.colorVar}))` }}
+          >
+            "{insight.quote}"
+          </div>
+        )}
       </div>
 
       {/* Explanation */}
@@ -103,19 +122,9 @@ export const InsightDetailPanel: React.FC<Props> = ({
           <div className="space-y-3">
             {suggestions.map((suggestion, index) => (
               <div key={index} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">
-                    {suggestion!.label}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onApplySuggestion?.(suggestion!.text)}
-                    className="text-xs"
-                  >
-                    החלף בטקסט
-                  </Button>
-                </div>
+                <span className="text-xs font-medium text-gray-500">
+                  {suggestion!.label}
+                </span>
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900">
                   {suggestion!.text}
                 </div>

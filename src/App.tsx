@@ -12,12 +12,15 @@ import AppShell from "@/components/layout/AppShell";
 
 const queryClient = new QueryClient();
 
+// Use environment variable for basename, defaulting to '/'
+const basename = import.meta.env.VITE_BASE_PATH || '/';
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <AppShell>
           <Routes>
             <Route path="/" element={<Index />} />

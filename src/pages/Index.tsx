@@ -14,11 +14,18 @@ import CriterionAccordion from "@/components/Editor/CriterionAccordion";
 import DecisionEditor from "@/components/Editor/DecisionEditor";
 import InsightDetailPanel from "@/components/Editor/InsightDetailPanel";
 import FindingsPanel from "@/components/Editor/FindingsPanel";
+import VersionInfo from "@/components/VersionInfo";
+import FloatingActionBox from "@/components/ui/floating-action-box";
+import { FloatingInsightDetail } from "@/components/ui/floating-insight-detail";
+import { Download } from "lucide-react";
+import { env } from "@/config/environment";
 
 const Index = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [currentCriterion, setCurrentCriterion] = useState<string>("");
   const [title, setTitle] = useState("מסמך חדש");
   const [content, setContent] = useState("");
   const [insights, setInsights] = useState<Insight[]>([]);
@@ -26,6 +33,7 @@ const Index = () => {
   const [criteria, setCriteria] = useState<Array<{ id: string; name: string; weight: number; score: number; justification: string }>>([]);
   const [summary, setSummary] = useState<{ feasibilityPercent: number; feasibilityLevel: 'low' | 'medium' | 'high'; reasoning: string } | null>(null);
   const [selectedInsight, setSelectedInsight] = useState<Insight | null>(null);
+  const [floatingInsight, setFloatingInsight] = useState<Insight | null>(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [isCleared, setIsCleared] = useState(false);
   const navigate = useNavigate();
@@ -75,16 +83,10 @@ const Index = () => {
         console.log(`💾 ${UI_VERSION} - Saved ${insights.length} insights for document ${doc.id}`);
       }
       
-      toast({ title: "מסמך נוצר בהצלחה", description: "עובר לעמוד העורך..." });
+      toast({ title: "מסמך נשמר בהצלחה" });
       
       // Reset cleared state
       setIsCleared(false);
-      
-      // Navigate to editor page with slight delay to ensure save completes
-      setTimeout(() => {
-        console.log(`🧭 ${UI_VERSION} - Navigating to /editor/${doc.id}`);
-        navigate(`/editor/${doc.id}`);
-      }, 100);
       
     } catch (e) {
       console.error(`❌ ${UI_VERSION} - Error creating document:`, e);
@@ -96,6 +98,39 @@ const Index = () => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const exportToDocx = () => {
+    if (!content.trim()) {
+      toast({ title: "אין תוכן לייצא", description: "אנא הזינו טקסט לפני הייצוא" });
+      return;
+    }
+    
+    // Create a simple HTML content for DOCX export
+    const htmlContent = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>${title || "מסמך"}</title>
+        </head>
+        <body>
+          <h1>${title || "מסמך"}</h1>
+          <div>${content.replace(/\n/g, '<br>')}</div>
+        </body>
+      </html>
+    `;
+    
+    const blob = new Blob([htmlContent], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title || 'מסמך'}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast({ title: "הקובץ יוצא בהצלחה" });
   };
 
   const onFile = async (file?: File) => {
@@ -137,11 +172,30 @@ const Index = () => {
       return;
     }
     setLoading(true);
+    setAnalysisProgress(0);
+    setCurrentCriterion("");
+    
     try {
       console.log(`🚀 ${UI_VERSION} - Starting analysis`);
       console.log(`📊 ${UI_VERSION} - Content length:`, content.length);
       
+      // Simulate progress through criteria
+      const criteriaNames = Object.values(CRITERIA).map(c => c.name);
+      const progressInterval = setInterval(() => {
+        setAnalysisProgress(prev => {
+          const newProgress = Math.min(prev + 15, 90);
+          const criterionIndex = Math.floor((newProgress / 90) * criteriaNames.length);
+          setCurrentCriterion(criteriaNames[criterionIndex] || "מסיים ניתוח...");
+          return newProgress;
+        });
+      }, 800);
+      
       const result: any = await analyzeDocument(content);
+      
+      clearInterval(progressInterval);
+      setAnalysisProgress(100);
+      setCurrentCriterion("הניתוח הושלם");
+      
       console.log(`📊 ${UI_VERSION} - Analysis result received:`, {
         hasInsights: Array.isArray(result) || Array.isArray(result?.insights),
         insightsCount: Array.isArray(result) ? result.length : (result?.insights?.length || 0),
@@ -178,6 +232,12 @@ const Index = () => {
       setCriteria(Array.isArray(result?.criteria) ? result.criteria : []);
       setSummary(result?.summary ?? null);
       setShowAnalysis(true);
+      
+      setTimeout(() => {
+        setAnalysisProgress(0);
+        setCurrentCriterion("");
+      }, 2000);
+      
       toast({ title: "הניתוח הושלם", description: "תוצאות הניתוח מוצגות בצד" });
     } catch (e) {
       console.error(`❌ ${UI_VERSION} - Analysis failed:`, e);
@@ -190,40 +250,10 @@ const Index = () => {
   const handleInsightClick = (insight: Insight) => {
     setSelectedInsight(insight);
     
-    // Check if we have a saved document that matches this insight
-    const savedDocuments = JSON.parse(localStorage.getItem('decisionDocuments') || '[]');
+    // Show floating insight detail
+    setFloatingInsight(insight);
     
-    // If we're not currently in the editor view and we have documents, navigate to editor
-    if (!showAnalysis || !content.trim()) {
-      // Find a document that might contain this insight
-      if (savedDocuments.length > 0) {
-        // For now, take the most recent document or try to find one that contains the quote
-        let targetDocument = savedDocuments[savedDocuments.length - 1];
-        
-        // Try to find a document that contains the insight quote
-        if (insight.quote) {
-          const docWithQuote = savedDocuments.find((doc: any) => 
-            doc.content && doc.content.includes(insight.quote)
-          );
-          if (docWithQuote) {
-            targetDocument = docWithQuote;
-          }
-        }
-        
-        console.log(`🔍 ${UI_VERSION} - Navigating to editor with document:`, targetDocument.id);
-        
-        // Navigate to editor with the document and insight
-        navigate(`/editor/${targetDocument.id}`, {
-          state: { 
-            selectedInsight: insight,
-            scrollToInsight: true
-          }
-        });
-        return;
-      }
-    }
-    
-    // If we're already in the editor or have content, scroll to the text
+    // Keep existing functionality for text scrolling when in analysis view
     if (showAnalysis && insight.rangeStart !== undefined && insight.rangeEnd !== undefined) {
       // Find the editor element
       const editorElement = document.querySelector('[contenteditable="true"]') as HTMLElement;
@@ -243,11 +273,50 @@ const Index = () => {
             });
             editorElement.dispatchEvent(event);
             
-            // Scroll the editor into view
-            editorElement.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'center' 
-            });
+            // Find the highlighted element to scroll to it precisely
+            setTimeout(() => {
+              const highlightedElement = document.querySelector('.insight-highlight.ring-2') as HTMLElement;
+              if (highlightedElement) {
+                const rect = highlightedElement.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                
+                // Get the insight panel element to calculate its position
+                const insightPanel = document.querySelector('[role="region"][aria-label="Insight details"]') || 
+                                    document.querySelector('.insight-detail-panel') ||
+                                    document.querySelector('[class*="InsightDetailPanel"]');
+                
+                if (insightPanel) {
+                  // Get the panel's position relative to viewport
+                  const panelRect = insightPanel.getBoundingClientRect();
+                  
+                  // Calculate scroll position to align highlighted text with insight panel
+                  // We want the highlighted text to appear at the same Y position as the panel content
+                  const panelContentTop = panelRect.top + 100; // Account for panel header
+                  const currentTextTop = rect.top;
+                  const scrollOffset = currentTextTop - panelContentTop;
+                  
+                  window.scrollTo({
+                    top: window.scrollY + scrollOffset,
+                    behavior: 'smooth'
+                  });
+                } else {
+                  // Fallback: position at a fixed location if panel not found
+                  // Keep text in the middle-left of the viewport (since panel is on the right)
+                  const targetPosition = window.scrollY + rect.top - (viewportHeight * 0.4);
+                  
+                  window.scrollTo({
+                    top: targetPosition,
+                    behavior: 'smooth'
+                  });
+                }
+              } else {
+                // Fallback to editor scrolling if highlight not found
+                editorElement.scrollIntoView({ 
+                  behavior: 'smooth', 
+                  block: 'center' 
+                });
+              }
+            }, 150); // Give time for the highlight to be applied
           }, 100);
         }
       }
@@ -273,16 +342,6 @@ const Index = () => {
     setInsights(newInsights);
   };
 
-  const handleApplySuggestion = (suggestion: string) => {
-    if (!selectedInsight) return;
-    
-    const beforeText = content.substring(0, selectedInsight.rangeStart);
-    const afterText = content.substring(selectedInsight.rangeEnd);
-    const newContent = beforeText + suggestion + afterText;
-    
-    setContent(newContent);
-    toast({ title: "הצעה יושמה", description: "הטקסט עודכן בהצלחה" });
-  };
 
   return (
     <div dir="rtl" className="min-h-screen bg-gray-50">
@@ -294,6 +353,16 @@ const Index = () => {
               <h1 className="text-lg font-semibold text-gray-900">כלי ניתוח החלטות ממשלה</h1>
               <p className="text-sm text-gray-500">כתיבה וניתוח מסמכי החלטה</p>
             </div>
+            <Button 
+              onClick={() => {
+                // Navigate to CECI chat interface at the new unified path
+                window.location.href = '/ceci-ai-chat';
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+              size="sm"
+            >
+              מעבר לצ'אט
+            </Button>
           </div>
           
           <div className="flex items-center gap-3">
@@ -314,6 +383,11 @@ const Index = () => {
                 setIsCleared(true);
                 setBusy(false); // Ensure busy state is reset
                 setLoading(false); // Ensure loading state is reset
+                // Reset file input to allow re-uploading the same file
+                if (inputRef.current) {
+                  inputRef.current.value = '';
+                  console.log(`🔄 ${UI_VERSION} - File input reset`);
+                }
                 console.log(`✅ ${UI_VERSION} - All states cleared successfully`);
                 toast({ 
                   title: "הטקסט נוקה", 
@@ -326,16 +400,11 @@ const Index = () => {
             >
               נקה
             </Button>
-            <Link to="/history">
-              <Button variant="outline" size="sm">
-                היסטוריה
-              </Button>
-            </Link>
             {isCleared ? (
               <Button 
                 onClick={() => {
                   console.log('📁 Cleared state - opening file upload');
-                  document.getElementById('file-upload')?.click();
+                  handlePick();
                 }}
                 disabled={busy}
                 variant="default" 
@@ -344,15 +413,28 @@ const Index = () => {
                 העלה מסמך חדש
               </Button>
             ) : (
-              <Button 
-                onClick={createNewDocument} 
-                disabled={busy || !content.trim()} 
-                variant="default" 
-                size="sm"
-                title={!content.trim() ? "אנא הזינו תוכן למסמך לפני השמירה" : ""}
-              >
-                {busy ? "שומר..." : "שמור ועבור לעורך"}
-              </Button>
+              <>
+                <Button 
+                  onClick={createNewDocument} 
+                  disabled={busy || !content.trim()} 
+                  variant="default" 
+                  size="sm"
+                  title={!content.trim() ? "אנא הזינו תוכן למסמך לפני השמירה" : ""}
+                >
+                  {busy ? "שומר..." : "שמור"}
+                </Button>
+                {content.trim() && (
+                  <Button 
+                    onClick={exportToDocx}
+                    disabled={busy}
+                    variant="outline" 
+                    size="sm"
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    יצא ל-DOCX
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -398,33 +480,31 @@ const Index = () => {
                 className="mb-4 text-lg font-medium border-0 border-b border-gray-200 rounded-none px-0 focus:ring-0 focus:border-blue-500"
               />
               
-              {showAnalysis ? (
-                <DecisionEditor
-                  content={content}
-                  insights={insights}
-                  onContentChange={handleContentChange}
-                  onInsightsChange={handleInsightsChange}
-                  onInsightSelect={handleInsightClick}
-                  selectedInsight={selectedInsight}
-                />
-              ) : (
-                <textarea
-                  className="w-full min-h-[60vh] border-0 resize-none focus:ring-0 text-base leading-relaxed outline-none"
-                  value={content}
-                  onChange={(e) => {
-                    setContent(e.target.value);
-                    if (isCleared && e.target.value.trim()) {
-                      setIsCleared(false);
-                    }
-                  }}
-                  placeholder={isCleared 
-                    ? "הקנבאס נוקה - כתבו או הדביקו טקסט חדש כאן..."
-                    : "כתבו או הדביקו את טקסט ההחלטה כאן..."
-                  }
-                />
-              )}
+              <DecisionEditor
+                content={content}
+                insights={insights}
+                onContentChange={handleContentChange}
+                onInsightsChange={handleInsightsChange}
+                onInsightSelect={handleInsightClick}
+                selectedInsight={selectedInsight}
+                criteria={criteria}
+              />
               
               <div className="mt-4 pt-4 border-t border-gray-200">
+                {loading && (
+                  <div className="mb-4 space-y-2">
+                    <div className="flex items-center justify-between text-sm text-gray-600">
+                      <span>מתקדם בניתוח...</span>
+                      <span>{analysisProgress}%</span>
+                    </div>
+                    <Progress value={analysisProgress} className="h-2" />
+                    {currentCriterion && (
+                      <div className="text-xs text-gray-500">
+                        {currentCriterion}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <Button 
                   onClick={onAnalyze} 
                   disabled={loading || !content.trim()} 
@@ -446,150 +526,121 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Right Sidebar */}
-        <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto max-h-screen">
-          <div className="p-6">
-            <div className="space-y-6">
-              {/* Version Info */}
-              <div className="bg-blue-50 p-3 rounded border text-xs">
-                <div className="font-semibold mb-2">🔧 Version Info:</div>
-                <div>UI: {UI_VERSION}</div>
-                <div>Backend: {meta?.version || 'unknown'}</div>
-                <div>Source: {meta?.source || 'N/A'}</div>
-              </div>
-
-              {/* Enhanced Debug Panel */}
-              <div className="bg-gray-50 p-3 rounded border text-xs">
-                <div className="font-semibold mb-2">🐛 Debug Info:</div>
-                <div>Content Length: {content.length}</div>
-                <div>Insights: {insights.length}</div>
-                <div>Criteria: {criteria.length}</div>
-                <div>Summary: {summary ? '✓' : '✗'}</div>
-                <div>Busy: {busy ? '✓' : '✗'}</div>
-                <div>Loading: {loading ? '✓' : '✗'}</div>
-                <div>Cleared: {isCleared ? '✓' : '✗'}</div>
-                <div>Can Save: {!busy && content.trim() ? '✓' : '✗'}</div>
-                <div>Meta source: {meta?.source || 'N/A'}</div>
-                <div>Meta version: {meta?.version || 'N/A'}</div>
-                {insights[0] && (
-                  <div className="mt-2 p-2 bg-white rounded border">
-                    <div className="font-medium">Sample Insight:</div>
-                    <div>ID: {insights[0].id}</div>
-                    <div>suggestion: {insights[0].suggestion ? `✓ (${insights[0].suggestion.length} chars)` : '✗'}</div>
-                    <div>suggestion_primary: {insights[0].suggestion_primary ? `✓ (${insights[0].suggestion_primary.length} chars)` : '✗'}</div>
-                    <div>suggestion_secondary: {insights[0].suggestion_secondary ? `✓ (${insights[0].suggestion_secondary.length} chars)` : '✗'}</div>
-                    {insights[0].suggestion_primary && (
-                      <div className="mt-1 text-xs text-gray-600 max-h-16 overflow-y-auto">
-                        <strong>Primary:</strong> {insights[0].suggestion_primary.substring(0, 100)}...
+        {/* Enhanced Sidebar */}
+        {(showAnalysis || insights.length > 0) && (
+          <div className="w-96 border-l border-gray-200 bg-white">
+            <div className="p-6 h-full overflow-auto">
+              {selectedInsight ? (
+                <InsightDetailPanel
+                  insight={selectedInsight}
+                  onClose={() => setSelectedInsight(null)}
+                />
+              ) : (
+                <div className="space-y-6">
+                  {/* Quick Stats */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-3">סטטיסטיקות</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-gray-600">סך הדגשות:</div>
+                        <div className="font-semibold text-lg">{insights.length}</div>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Feasibility Score */}
-              {summary && (
-                <div className="border-t border-gray-200 pt-6">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">ציון כללי:</h4>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-900 mb-1">
-                      {summary.feasibilityPercent}%
-                    </div>
-                    <div className="text-sm text-gray-500 mb-3">
-                      {summary.feasibilityLevel === 'low' ? 'ישימות נמוכה' : 
-                       summary.feasibilityLevel === 'medium' ? 'ישימות בינונית' : 
-                       'ישימות גבוהה'}
-                    </div>
-                    <Progress value={summary.feasibilityPercent} className="h-2" />
-                  </div>
-                  
-                  {summary.reasoning && (
-                    <p className="mt-4 text-xs text-gray-600 leading-relaxed">
-                      {summary.reasoning}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Analysis Results */}
-              {showAnalysis && criteria.length > 0 && (
-                <div className="border-t border-gray-200 pt-6">
-                  <FindingsPanel 
-                    criteriaData={criteria} 
-                    insights={insights} 
-                    onJump={handleInsightClick} 
-                  />
-                </div>
-              )}
-
-              {/* Quick Summary for when no detailed analysis */}
-              {showAnalysis && insights.length === 0 && criteria.length > 0 && (
-                <div className="border-t border-gray-200 pt-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">ניתוח לפי קריטריונים</h3>
-                  
-                  <div className="space-y-3">
-                    {CRITERIA.map((criterion) => {
-                      const criterionData = criteria.find(c => c.id === criterion.id);
-                      const score = criterionData?.score ?? 0;
-                      const insightCount = insights.filter(ins => ins.criterionId === criterion.id).length;
-                      
-                      return (
-                        <div key={criterion.id} className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-3 h-3 rounded-full"
-                              style={{ backgroundColor: `var(${criterion.colorVar})` }}
-                            />
-                            <span className="text-sm text-gray-700">{criterion.name}:</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg font-medium text-gray-900">{insightCount}</span>
-                            {score > 0 && (
-                              <span className="text-xs text-gray-500">({score}/10)</span>
-                            )}
-                          </div>
+                      <div>
+                        <div className="text-gray-600">הדגשות פעילות:</div>
+                        <div className="font-semibold text-lg text-green-600">
+                          {insights.filter(i => !i.isStale).length}
                         </div>
-                      );
-                    })}
+                      </div>
+                      <div>
+                        <div className="text-gray-600">הדגשות ישנות:</div>
+                        <div className="font-semibold text-lg text-orange-600">
+                          {insights.filter(i => i.isStale).length}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-600">תווים:</div>
+                        <div className="font-semibold text-lg">{content.length.toLocaleString()}</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
 
-              {/* Analysis Meta */}
-              {meta && (
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="text-xs text-gray-500">
-                    {meta.source === 'assistants' ? (
-                      <span>
-                        מופעל ע״י OpenAI Assistant
-                        {meta.model ? ` • ${meta.model}` : ''}
-                      </span>
-                    ) : meta.source === 'openai' ? (
-                      <span>
-                        מופעל ע״י OpenAI
-                        {meta.model ? ` • ${meta.model}` : ''}
-                      </span>
-                    ) : (
-                      <span>מופעל ע״י ניתוח מקומי</span>
+                  {/* Feasibility Summary */}
+                  {summary && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      <h3 className="text-lg font-medium text-gray-900 mb-3">הערכת ביצוע</h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-gray-600">רמת הביצוע:</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                            summary.feasibilityLevel === 'high' ? 'bg-green-100 text-green-800' :
+                            summary.feasibilityLevel === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {summary.feasibilityLevel === 'high' ? 'גבוהה' :
+                             summary.feasibilityLevel === 'medium' ? 'בינונית' : 'נמוכה'}
+                          </span>
+                          <span className="font-bold text-lg">{summary.feasibilityPercent}%</span>
+                        </div>
+                      </div>
+                      <Progress value={summary.feasibilityPercent} className="mb-3" />
+                      <p className="text-sm text-gray-700 leading-relaxed">{summary.reasoning}</p>
+                    </div>
+                  )}
+                  
+                  {/* Keyboard Shortcuts */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-medium text-gray-900 mb-2">קיצורי מקלדת</h4>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <div><kbd className="px-1 py-0.5 bg-gray-200 rounded">Alt + ↑/↓</kbd> - ניווט בין הדגשות</div>
+                      <div><kbd className="px-1 py-0.5 bg-gray-200 rounded">Ctrl + Z</kbd> - ביטול</div>
+                      <div><kbd className="px-1 py-0.5 bg-gray-200 rounded">Ctrl + Y</kbd> - חזרה</div>
+                      <div><kbd className="px-1 py-0.5 bg-gray-200 rounded">Ctrl + Enter</kbd> - יישום הצעה</div>
+                    </div>
+                  </div>
+                  
+                  {/* Detailed Analysis */}
+                  <FindingsPanel 
+                    insights={insights} 
+                    criteriaData={criteria}
+                    onJump={handleInsightClick}
+                  />
+                  
+                  {/* Version & Debug Info */}
+                  <div className="space-y-4">
+                    <VersionInfo />
+                    {meta && (
+                      <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg space-y-1">
+                        <div className="font-medium text-gray-700 mb-2">פרטי ניתוח</div>
+                        <div>גרסת UI: {UI_VERSION}</div>
+                        <div>מקור: {meta.source || 'לא ידוע'}</div>
+                        <div>גרסת ניתוח: {meta.version || 'לא ידוע'}</div>
+                        
+                      </div>
                     )}
                   </div>
                 </div>
               )}
             </div>
           </div>
-
-          {/* Insight Detail Panel */}
-          {selectedInsight && (
-            <div className="border-t border-gray-200">
-              <InsightDetailPanel
-                insight={selectedInsight}
-                onApplySuggestion={handleApplySuggestion}
-                onClose={() => setSelectedInsight(null)}
-              />
-            </div>
-          )}
-        </div>
+        )}
       </div>
+      
+      {/* Floating Action Box */}
+      <FloatingActionBox
+        onAnalyze={onAnalyze}
+        onFileUpload={handlePick}
+        busy={loading || busy}
+        disabled={!content.trim()}
+      />
+      
+      {/* Floating Insight Detail */}
+      {floatingInsight && (
+        <FloatingInsightDetail
+          insight={floatingInsight}
+          criteria={criteria}
+          onClose={() => setFloatingInsight(null)}
+        />
+      )}
     </div>
   );
 };

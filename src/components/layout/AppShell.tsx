@@ -21,15 +21,27 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="min-h-screen bg-gradient-primary">
       <header className="border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex items-center justify-between py-3">
-          <Link to="/" className="font-bold text-lg tracking-tight">
-            Decision Advisor
-          </Link>
-          <nav className="flex items-center gap-1" dir="rtl">
-            <NavLink to="/" label="בית" />
-            <NavLink to="/history" label="היסטוריה" />
-            <NavLink to="/login" label="התחברות" />
-          </nav>
+        <div className="container mx-auto py-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <img 
+                src="/lovable-uploads/78f51a25-837d-4a25-a4cf-e0981aa6f079.png" 
+                alt="Ceci.AI Logo" 
+                className="h-12 w-auto"
+              />
+            </div>
+            <nav className="flex items-center gap-1" dir="rtl">
+              <NavLink to="/" label="בית" />
+              <NavLink to="/history" label="היסטוריה" />
+              <NavLink to="/login" label="התחברות" />
+            </nav>
+          </div>
+          <div className="text-center" dir="rtl">
+            <h1 className="text-2xl font-bold mb-3">ברוכים הבאים ל-CeciAI</h1>
+            <p className="text-muted-foreground max-w-4xl mx-auto leading-relaxed">
+            בהתבסס על מאגר של יותר מ-25,000 החלטות ממשלה ומאות דוחות מוניטור, תוכלו לסקור החלטות עבר, לנתח טיוטת החלטה לפי קריטריונים מקצועיים, ולקבל שיפורים שיהפכו אותה לישימה וברורה יותר.
+            </p>
+          </div>
         </div>
       </header>
       <main className="container mx-auto py-8">{children}</main>

@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Insight } from "@/types/models";
 import { CRITERIA } from "@/data/criteria";
-import { CheckCircle2, AlertCircle, XCircle, ArrowRight, Copy } from "lucide-react";
+import { CheckCircle2, AlertCircle, XCircle, ArrowRight, Copy, MapPin } from "lucide-react";
 
 type CriterionScore = {
   id: string;
@@ -74,13 +74,6 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
 
   return (
     <div className="space-y-2">
-      <div className="text-center mb-6">
-        <h3 className="text-lg font-semibold">סיכום מהיר - ניתוח לפי קריטריונים</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          לחץ על כל קריטריון לפתיחת פרטים מלאים
-        </p>
-      </div>
-      
       <Accordion type="multiple" className="w-full space-y-2">
         {CRITERIA.map((c) => {
           const data = byId[c.id];
@@ -125,8 +118,63 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
 
                   <Separator />
 
-                  {/* ציטוט מהמסמך */}
-                  {mainInsight?.quote && (
+                  {/* ציטוטים מהמסמך */}
+                  {(mainInsight?.quotes && mainInsight.quotes.length > 0) ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold">
+                          {mainInsight.quotes.length > 1 
+                            ? `ציטוטים מהמסמך (${mainInsight.quotes.length})`
+                            : 'ציטוט מהמסמך'}
+                        </h4>
+                      </div>
+                      <div className="space-y-2">
+                        {mainInsight.quotes.map((quote, qIdx) => (
+                          <div key={quote.id || qIdx} className="relative">
+                            {mainInsight.quotes.length > 1 && (
+                              <div className="text-xs text-muted-foreground mb-1">
+                                ציטוט {qIdx + 1}:
+                              </div>
+                            )}
+                            <blockquote className="bg-secondary/50 rounded-md p-3 border-r-4 border-primary/30 group hover:bg-secondary/70 transition-colors">
+                              <p className="text-sm italic">"{quote.text}"</p>
+                              {onJump && (
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={() => {
+                                    // Navigate to specific quote without closing accordion
+                                    const quoteElement = document.querySelector(`[data-quote-ids*="${quote.id}"]`);
+                                    if (quoteElement) {
+                                      quoteElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                      // Add pulse animation
+                                      quoteElement.classList.add('highlight-pulse');
+                                      setTimeout(() => {
+                                        quoteElement.classList.remove('highlight-pulse');
+                                      }, 4500);
+                                      
+                                      // Trigger click on the highlight to show InsightPanel
+                                      const clickEvent = new MouseEvent('click', {
+                                        bubbles: true,
+                                        cancelable: true,
+                                        view: window
+                                      });
+                                      quoteElement.dispatchEvent(clickEvent);
+                                    }
+                                    // Don't call onJump to keep accordion open
+                                  }}
+                                  className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <MapPin className="h-3 w-3 mr-1" />
+                                  מעבר לציטוט
+                                </Button>
+                              )}
+                            </blockquote>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : mainInsight?.quote ? (
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-semibold">ציטוט מהמסמך</h4>
@@ -134,7 +182,20 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                           <Button 
                             size="sm" 
                             variant="outline"
-                            onClick={() => onJump(mainInsight)}
+                            onClick={() => {
+                              // Find and scroll to the quote
+                              const quoteElements = document.querySelectorAll(`[data-criterion-ids*="${mainInsight.criterionId}"]`);
+                              if (quoteElements.length > 0) {
+                                quoteElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                // Trigger click to show InsightPanel
+                                const clickEvent = new MouseEvent('click', {
+                                  bubbles: true,
+                                  cancelable: true,
+                                  view: window
+                                });
+                                quoteElements[0].dispatchEvent(clickEvent);
+                              }
+                            }}
                             className="text-xs"
                           >
                             <ArrowRight className="h-3 w-3 mr-1" />
@@ -146,7 +207,7 @@ const CriterionAccordion: React.FC<Props> = ({ criteriaData, insights, onJump })
                         <p className="text-sm italic">"{mainInsight.quote}"</p>
                       </blockquote>
                     </div>
-                  )}
+                  ) : null}
 
                   <Separator />
 

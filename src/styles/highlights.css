@@ -1,0 +1,327 @@
+/* Enhanced highlight styles for multi-quote support */
+
+/* Base highlight style */
+.insight-highlight {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  border-radius: 0.125rem;
+}
+
+/* Pulse animation for navigation */
+.highlight-pulse {
+  animation: highlight-pulse 1.5s ease-in-out 3;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(251, 191, 36, 0);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+    transform: scale(1);
+  }
+}
+
+/* Hover effect */
+.insight-highlight:hover {
+  filter: brightness(0.9);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+/* Active/selected highlight */
+.insight-highlight.active {
+  animation: pulse-highlight 2s ease-in-out;
+  box-shadow: 0 0 0 3px rgba(var(--primary), 0.3);
+}
+
+/* Pulse animation for navigation */
+@keyframes pulse-highlight {
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--primary), 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(var(--primary), 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--primary), 0);
+  }
+}
+
+/* Multi-insight highlight gradient */
+.insight-highlight.multi-insight {
+  background: linear-gradient(
+    45deg,
+    rgba(var(--crit-color-1), 0.2),
+    rgba(var(--crit-color-2), 0.2)
+  );
+  border: 2px solid rgba(var(--primary), 0.3);
+}
+
+/* Quote navigation target */
+.quote-navigation-target {
+  position: relative;
+}
+
+.quote-navigation-target::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  background: rgba(var(--primary), 0.6);
+  animation: slide-in 0.3s ease-out;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Tooltip styles */
+.quote-tooltip {
+  position: fixed;
+  background: rgba(31, 41, 55, 0.95);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  z-index: 100;
+  max-width: 400px;
+  backdrop-filter: blur(4px);
+  animation: tooltip-fade-in 0.2s ease-out;
+}
+
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.quote-tooltip .criterion-name {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: rgba(251, 191, 36, 1);
+}
+
+.quote-tooltip .quote-snippet {
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(229, 231, 235, 1);
+  margin-bottom: 8px;
+}
+
+.quote-tooltip .hint {
+  font-size: 11px;
+  color: rgba(156, 163, 175, 1);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Quote item in sidebar */
+.quote-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quote-item:hover {
+  background: rgba(var(--primary), 0.05);
+  transform: translateX(4px);
+}
+
+.quote-item .quote-index {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(var(--primary), 0.7);
+  min-width: 60px;
+}
+
+.quote-item .quote-preview {
+  flex: 1;
+  font-size: 13px;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote-item svg {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.quote-item:hover svg {
+  opacity: 1;
+}
+
+/* Criterion color variables for highlights */
+:root {
+  --crit-timeline: 25, 87%, 56%;
+  --crit-integrator: 142, 71%, 45%;
+  --crit-reporting: 199, 89%, 48%;
+  --crit-evaluation: 262, 52%, 47%;
+  --crit-external-audit: 339, 69%, 52%;
+  --crit-resources: 43, 96%, 56%;
+  --crit-multi-levels: 173, 58%, 39%;
+  --crit-structure: 220, 14%, 46%;
+  --crit-field-implementation: 15, 79%, 54%;
+  --crit-arbitrator: 280, 61%, 50%;
+  --crit-cross-sector: 192, 91%, 36%;
+  --crit-outcomes: 84, 82%, 44%;
+}
+
+/* Quote count badge on highlights */
+.quote-count-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(31, 41, 55, 0.9);
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+}
+
+/* Enhanced multi-quote tooltip */
+.multi-quote-tooltip {
+  position: fixed;
+  background: rgba(31, 41, 55, 0.98);
+  color: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 1000;
+  max-width: 500px;
+  min-width: 350px;
+  backdrop-filter: blur(8px);
+  animation: tooltip-fade-in 0.2s ease-out;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.multi-quote-tooltip .criteria-badges {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.multi-quote-tooltip .criterion-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.multi-quote-tooltip .criterion-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.multi-quote-tooltip .quote-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.multi-quote-tooltip .quote-counter {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(251, 191, 36, 1);
+}
+
+.multi-quote-tooltip .nav-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.multi-quote-tooltip .nav-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 16px;
+}
+
+.multi-quote-tooltip .nav-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+.multi-quote-tooltip .nav-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.multi-quote-tooltip .quote-text {
+  font-size: 14px;
+  line-height: 1.5;
+  font-style: italic;
+  color: rgba(229, 231, 235, 1);
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  border-right: 3px solid;
+  margin-bottom: 12px;
+}
+
+.multi-quote-tooltip .hint-text {
+  font-size: 11px;
+  color: rgba(156, 163, 175, 1);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}

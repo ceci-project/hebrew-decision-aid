@@ -2,12 +2,12 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const VERSION = "AssistantPath v2025-08-26-D-Hebrew";
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID');
-const assistantId = Deno.env.get('ASSISTANT_ID');
+const VERSION = "AssistantPath v2025-08-26-D-Hebrew-Enhanced";
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('VITE_OPENAI_API_KEY');
+const openAIProjectId = Deno.env.get('OPENAI_PROJECT_ID') || Deno.env.get('VITE_OPENAI_PROJECT_ID') || Deno.env.get('DECISION_AID_OPENAI_PROJECT_ID');
+const assistantId = Deno.env.get('ASSISTANT_ID') || Deno.env.get('VITE_ASSISTANT_ID') || Deno.env.get('DECISION_AID_ASSISTANT_ID');
 
-console.log(`🚀 ${VERSION} - Starting analyze-assistant function`);
+console.log(`🚀 ${VERSION} - Starting enhanced analyze-assistant function`);
 console.log(`Environment check: { hasOpenaiKey: ${!!openAIApiKey}, openaiKeyLength: ${openAIApiKey?.length || 0}, hasProjectId: ${!!openAIProjectId}, hasAssistantId: ${!!assistantId}, assistantIdLength: ${assistantId?.length || 0} }`);
 
 const corsHeaders = {
@@ -29,6 +29,163 @@ const ALLOWED_CRITERIA = [
   'cross_sector',
   'outcomes',
 ] as const;
+
+// Fallback Chat Completions function for when Assistant API fails
+async function fallbackToChatAPI(content: string, maxInsights: number) {
+  console.log(`🔄 ${VERSION} - Falling back to Chat Completions API`);
+  
+  const systemPrompt = `אתה עוזר שמעריך החלטות ממשלתיות בעברית בלבד באמצעות רובריקה של 12 קריטריונים. תחזיר JSON בלבד.
+
+חשוב מאוד - מערכת הניקוד לכל קריטריון (חובה 0-5):
+- ציון 0 = אין התייחסות כלל לקריטריון בטקסט ההחלטה
+- ציון 1 = התייחסות מינימלית או רמיזה בלבד לקריטריון
+- ציון 2 = התייחסות חלקית עם חוסרים משמעותיים
+- ציון 3 = התייחסות בינונית עם כמה פרטים חסרים
+- ציון 4 = התייחסות טובה עם רוב הפרטים הנדרשים
+- ציון 5 = התייחסות מצוינת ומקיפה עם כל הפרטים הנדרשים
+
+חובה: תן ציון 0 לכל קריטריון שלא מוזכר או לא רלוונטי בטקסט!
+
+חזור אובייקט עם השדות: criteria[12], summary, insights[]. ראה את הסוגים המדויקים למטה.
+
+חובה: כל הטקסט בשדות explanation, suggestion, suggestion_primary, suggestion_secondary, justification, reasoning, name חייב להיות בעברית בלבד!
+
+{
+  "criteria": Array<{
+    "id": "timeline" | "integrator" | "reporting" | "evaluation" | "external_audit" | "resources" | "multi_levels" | "structure" | "field_implementation" | "arbitrator" | "cross_sector" | "outcomes",
+    "name": string,              // בעברית בלבד
+    "weight": number,            // percentage 0-100 matching the rubric weights
+    "score": number,             // integer 0-5
+    "justification": string,     // בעברית בלבד
+    "evidence"?: Array<{ "quote": string, "rangeStart": number, "rangeEnd": number }>
+  }>,
+  "summary": {
+    "feasibilityPercent": number,           // 0-100 weighted by the 12 criteria
+    "feasibilityLevel": "low" | "medium" | "high", // 0-49 low, 50-74 medium, 75-100 high
+    "reasoning": string                     // בעברית בלבד
+  },
+  "insights": Array<{
+    "id": string,
+    "criterionId": "timeline" | "integrator" | "reporting" | "evaluation" | "external_audit" | "resources" | "multi_levels" | "structure" | "field_implementation" | "arbitrator" | "cross_sector" | "outcomes",
+    "quote": string,
+    "explanation": string,           // בעברית בלבד
+    "suggestion": string,           // בעברית בלבד
+    "suggestion_primary": string,   // בעברית בלבד
+    "suggestion_secondary": string, // בעברית בלבד
+    "rangeStart": number,
+    "rangeEnd": number
+  }>
+}
+
+מגביל insights ל-${maxInsights} פריטים מקסימום.
+
+חיוני: כל הטקסט חייב להיות בעברית בלבד!`;
+
+  const userPrompt = `נתח את המסמך הממשלתי הבא ותן ביקורת על פי רובריקת 12 הקריטריונים:
+
+${content.substring(0, 8000)}
+
+החזר רק JSON עם המבנה שצוין לעיל.`;
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openAIApiKey}`,
+      'Content-Type': 'application/json',
+      ...(openAIProjectId ? { 'OpenAI-Project': openAIProjectId } : {}),
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.3,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Chat API failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const responseText = data.choices?.[0]?.message?.content;
+  
+  if (!responseText) {
+    throw new Error('Empty response from Chat API');
+  }
+
+  return JSON.parse(responseText);
+}
+
+// Process and validate analysis results (used by both Assistant and Chat APIs)
+function processAnalysisResult(parsed: any, maxInsights: number) {
+  let insights = Array.isArray(parsed.insights)
+    ? parsed.insights.slice(0, maxInsights).map((i: any, idx: number) => ({
+        id: String(i?.id ?? `assistant-${idx}`),
+        criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
+        quote: String(i?.quote ?? ''),
+        explanation: String(i?.explanation ?? ''),
+        suggestion: String(i?.suggestion ?? ''),
+        suggestion_primary: String(i?.suggestion_primary ?? i?.suggestion ?? ''),
+        suggestion_secondary: String(i?.suggestion_secondary ?? ''),
+        rangeStart: Number.isFinite(i?.rangeStart) ? i.rangeStart : 0,
+        rangeEnd: Number.isFinite(i?.rangeEnd) ? i.rangeEnd : 0,
+      }))
+    : [];
+
+  const criteria = Array.isArray(parsed.criteria)
+    ? parsed.criteria.map((c: any) => ({
+        id: (ALLOWED_CRITERIA as readonly string[]).includes(c?.id) ? c.id : 'timeline',
+        name: String(c?.name ?? String(c?.id ?? '')),
+        weight: Math.max(0, Math.min(100, Number(c?.weight) || 0)),
+        score: Math.max(0, Math.min(5, Number(c?.score) || 0)),
+        justification: String(c?.justification ?? ''),
+        evidence: Array.isArray(c?.evidence) ? c.evidence.map((e: any) => ({
+          quote: String(e?.quote ?? ''),
+          rangeStart: Number.isFinite(e?.rangeStart) ? e.rangeStart : 0,
+          rangeEnd: Number.isFinite(e?.rangeEnd) ? e.rangeEnd : 0,
+        })) : [],
+      }))
+    : [];
+
+  // Synthesize insights from criteria evidence if missing
+  if ((!insights || insights.length === 0) && Array.isArray(criteria)) {
+    const synth: any[] = [];
+    for (const c of criteria) {
+      if (Array.isArray(c.evidence) && c.evidence.length) {
+        for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
+          const e = c.evidence[k];
+          const defaultSuggestions = getDefaultSuggestions(c.id);
+          synth.push({
+            id: `${c.id}-ev-${k}`,
+            criterionId: c.id,
+            quote: String(e.quote || ''),
+            explanation: c.justification || `חיזוק: ${c.name}`,
+            suggestion: defaultSuggestions.primary,
+            suggestion_primary: defaultSuggestions.primary,
+            suggestion_secondary: defaultSuggestions.secondary,
+            rangeStart: Number.isFinite(e.rangeStart) ? e.rangeStart : 0,
+            rangeEnd: Number.isFinite(e.rangeEnd) ? e.rangeEnd : 0,
+          });
+        }
+      }
+    }
+    if (synth.length > 0) {
+      insights = synth.slice(0, maxInsights);
+    }
+  }
+
+  const summary = parsed.summary ? {
+    feasibilityPercent: Math.max(0, Math.min(100, Number(parsed.summary.feasibilityPercent) || 0)),
+    feasibilityLevel: ['low', 'medium', 'high'].includes(parsed.summary.feasibilityLevel) 
+      ? parsed.summary.feasibilityLevel : 'medium',
+    reasoning: String(parsed.summary.reasoning || 'לא צוין נימוק')
+  } : null;
+
+  return { insights, criteria, summary };
+}
 
 serve(async (req) => {
   console.log(`📥 ${VERSION} - Request received: ${req.method} at ${new Date().toISOString()}`);
@@ -64,9 +221,9 @@ serve(async (req) => {
     const truncatedContent = content.length > 8000 ? content.substring(0, 8000) + "..." : content;
     console.log(`📝 ${VERSION} - Content prepared: originalLength=${content.length}, truncatedLength=${truncatedContent.length}`);
 
-    // Create AbortController for timeout
+    // Create AbortController for more aggressive timeout for Assistant API
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for Assistant API
 
     try {
       console.log(`🔄 ${VERSION} - Step 1: Creating thread`);
@@ -107,6 +264,16 @@ serve(async (req) => {
         body: JSON.stringify({
           role: 'user',
           content: `נתח את המסמך הממשלתי הבא ותן ביקורת על פי רובריקת 12 הקריטריונים.
+
+חשוב מאוד - מערכת הניקוד לכל קריטריון (חובה 0-5):
+- ציון 0 = אין התייחסות כלל לקריטריון בטקסט ההחלטה
+- ציון 1 = התייחסות מינימלית או רמיזה בלבד לקריטריון
+- ציון 2 = התייחסות חלקית עם חוסרים משמעותיים
+- ציון 3 = התייחסות בינונית עם כמה פרטים חסרים
+- ציון 4 = התייחסות טובה עם רוב הפרטים הנדרשים
+- ציון 5 = התייחסות מצוינת ומקיפה עם כל הפרטים הנדרשים
+
+חובה: תן ציון 0 לכל קריטריון שלא מוזכר או לא רלוונטי בטקסט!
 
 חשוב מאוד: כל התוכן חייב להיות בעברית בלבד!
 
@@ -167,11 +334,11 @@ ${truncatedContent}
       const runId = run.id;
       console.log(`✅ ${VERSION} - Run created: ${runId}, status: ${run.status}`);
 
-      // Step 4: Poll for completion
+      // Step 4: Poll for completion - reduced timeout for faster fallback
       console.log(`🔄 ${VERSION} - Step 4: Polling for completion`);
       let runStatus = run.status;
       let attempts = 0;
-      const maxAttempts = 12; // 24 seconds timeout (12 * 2 seconds)
+      const maxAttempts = 6; // 12 seconds timeout (6 * 2 seconds)
 
       while (['queued', 'in_progress'].includes(runStatus) && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
@@ -245,91 +412,22 @@ ${truncatedContent}
         parsed = { insights: [], criteria: [], summary: null };
       }
 
-      // Process and validate the response
-      let insights = Array.isArray(parsed.insights)
-        ? parsed.insights.slice(0, maxInsights).map((i: any, idx: number) => ({
-            id: String(i?.id ?? `assistant-${idx}`),
-            criterionId: (ALLOWED_CRITERIA as readonly string[]).includes(i?.criterionId) ? i.criterionId : 'timeline',
-            quote: String(i?.quote ?? ''),
-            explanation: String(i?.explanation ?? ''),
-            suggestion: String(i?.suggestion ?? ''),
-            suggestion_primary: String(i?.suggestion_primary ?? i?.suggestion ?? ''),
-            suggestion_secondary: String(i?.suggestion_secondary ?? ''),
-            rangeStart: Number.isFinite(i?.rangeStart) ? i.rangeStart : 0,
-            rangeEnd: Number.isFinite(i?.rangeEnd) ? i.rangeEnd : 0,
-          }))
-        : [];
-
-      const criteria = Array.isArray(parsed.criteria)
-        ? parsed.criteria.map((c: any) => ({
-            id: (ALLOWED_CRITERIA as readonly string[]).includes(c?.id) ? c.id : 'timeline',
-            name: String(c?.name ?? String(c?.id ?? '')),
-            weight: Math.max(0, Math.min(100, Number(c?.weight) || 0)),
-            score: Math.max(0, Math.min(5, Number(c?.score) || 0)),
-            justification: String(c?.justification ?? ''),
-            evidence: Array.isArray(c?.evidence) ? c.evidence.map((e: any) => ({
-              quote: String(e?.quote ?? ''),
-              rangeStart: Number.isFinite(e?.rangeStart) ? e.rangeStart : 0,
-              rangeEnd: Number.isFinite(e?.rangeEnd) ? e.rangeEnd : 0,
-            })) : [],
-          }))
-        : [];
-
-      // Synthesize insights from criteria evidence if missing
-      if ((!insights || insights.length === 0) && Array.isArray(criteria)) {
-        const synth: any[] = [];
-        for (const c of criteria) {
-          if (Array.isArray(c.evidence) && c.evidence.length) {
-            for (let k = 0; k < Math.min(c.evidence.length, 2); k++) {
-              const e = c.evidence[k];
-              const defaultSuggestions = getDefaultSuggestions(c.id);
-              synth.push({
-                id: `${c.id}-ev-${k}`,
-                criterionId: c.id,
-                quote: String(e.quote || ''),
-                explanation: c.justification || `חיזוק: ${c.name}`,
-                suggestion: defaultSuggestions.primary,
-                suggestion_primary: defaultSuggestions.primary,
-                suggestion_secondary: defaultSuggestions.secondary,
-                rangeStart: Number.isFinite(e.rangeStart) ? e.rangeStart : 0,
-                rangeEnd: Number.isFinite(e.rangeEnd) ? e.rangeEnd : 0,
-              });
-            }
-          }
-        }
-        if (synth.length) {
-          insights = synth.slice(0, maxInsights);
-        }
-      }
-
-      let summary = parsed?.summary && typeof parsed.summary === 'object' ? {
-        feasibilityPercent: Math.max(0, Math.min(100, Number(parsed.summary.feasibilityPercent) || 0)),
-        feasibilityLevel: ['low','medium','high'].includes(parsed.summary.feasibilityLevel) ? parsed.summary.feasibilityLevel : undefined,
-        reasoning: String(parsed.summary.reasoning ?? ''),
-      } : null;
-
-      if (!summary || !summary.feasibilityLevel) {
-        const totalW = criteria.reduce((s: number, c: any) => s + (c.weight || 0), 0) || 1;
-        const pct = criteria.reduce((s: number, c: any) => s + ((c.score || 0) / 5) * (c.weight || 0), 0) / totalW * 100;
-        const percent = Math.round(pct);
-        const level = percent < 50 ? 'low' : percent < 75 ? 'medium' : 'high';
-        summary = { feasibilityPercent: percent, feasibilityLevel: level, reasoning: summary?.reasoning || '' } as any;
-      }
-
-      console.log(`🎉 ${VERSION} - Analysis completed successfully: ${insights.length} insights, ${criteria.length} criteria`);
-      console.log(`📊 ${VERSION} - Sample insight check:`, insights[0] ? {
-        id: insights[0].id,
-        hasSuggestion: !!insights[0].suggestion,
-        hasPrimary: !!insights[0].suggestion_primary,
-        hasSecondary: !!insights[0].suggestion_secondary,
-        isHebrew: /[\u0590-\u05FF]/.test(insights[0].explanation || '')
+      // Process and validate the response using shared function
+      const processedResult = processAnalysisResult(parsed, maxInsights);
+      
+      // For Assistant API, add debugging info
+      console.log(`🎉 ${VERSION} - Analysis completed successfully: ${processedResult.insights.length} insights, ${processedResult.criteria.length} criteria`);
+      console.log(`📊 ${VERSION} - Sample insight check:`, processedResult.insights[0] ? {
+        id: processedResult.insights[0].id,
+        hasSuggestion: !!processedResult.insights[0].suggestion,
+        hasPrimary: !!processedResult.insights[0].suggestion_primary,
+        hasSecondary: !!processedResult.insights[0].suggestion_secondary,
+        isHebrew: /[\u0590-\u05FF]/.test(processedResult.insights[0].explanation || '')
       } : 'No insights');
 
       return new Response(
         JSON.stringify({ 
-          insights, 
-          criteria, 
-          summary, 
+          ...processedResult,
           meta: { source: 'assistants', threadId, runId, version: VERSION } 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -337,17 +435,44 @@ ${truncatedContent}
 
     } catch (timeoutError) {
       clearTimeout(timeoutId);
-      console.error(`⏰ ${VERSION} - Request timeout or abort:`, timeoutError);
+      console.error(`⏰ ${VERSION} - Assistant API timeout or abort, attempting fallback:`, timeoutError);
       throw timeoutError;
     }
 
   } catch (error) {
-    console.error(`💥 ${VERSION} - Fatal error:`, error);
-    return new Response(
-      JSON.stringify({ error: error.message || 'Analysis failed', version: VERSION }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error(`💥 ${VERSION} - Assistant API failed, attempting Chat API fallback:`, error);
+    
+    // Fallback to Chat Completions API
+    try {
+      console.log(`🔄 ${VERSION} - Attempting Chat API fallback`);
+      const fallbackResult = await fallbackToChatAPI(content, maxInsights);
+      
+      // Process the fallback result with the same validation logic
+      const processedResult = processAnalysisResult(fallbackResult, maxInsights);
+      
+      return new Response(
+        JSON.stringify({
+          ...processedResult,
+          meta: { source: 'openai', model: 'gpt-4o', version: VERSION, fallback: true }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } catch (fallbackError) {
+      console.error(`💥 ${VERSION} - Both Assistant API and Chat API failed:`, fallbackError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Both analysis methods failed', 
+          details: {
+            assistantError: error.message,
+            fallbackError: fallbackError.message
+          },
+          version: VERSION 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
   }
+
 });
 
 // Helper function to provide default suggestions for each criterion in Hebrew

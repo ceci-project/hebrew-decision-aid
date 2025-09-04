@@ -70,8 +70,22 @@ const EditorPage = () => {
       AnchorManager.enhanceInsightWithAnchors(insight, loadedDoc.content)
     );
     
+    // Load criteria and summary from storage
+    const loadedCriteria = storage.getCriteria(id);
+    const loadedSummary = storage.getSummary(id);
+    
     console.log(`🔍 ${UI_VERSION} - Loaded insights:`, enhancedInsights.length);
+    console.log(`🔍 ${UI_VERSION} - Loaded criteria:`, loadedCriteria.length);
+    console.log(`🔍 ${UI_VERSION} - Loaded summary:`, !!loadedSummary);
+    console.log(`🔍 ${UI_VERSION} - LOADED CRITERIA DETAILS:`, {
+      criteriaArray: loadedCriteria,
+      criteriaKeys: loadedCriteria.map(c => Object.keys(c)),
+      criteriaScores: loadedCriteria.map(c => ({ id: c.id, score: c.score }))
+    });
+    
     setInsights(enhancedInsights);
+    setCriteria(loadedCriteria);
+    setSummary(loadedSummary);
 
     // If we have a specific insight to highlight from navigation, set it and trigger scroll
     if (navigationState?.scrollToInsight && navigationState?.selectedInsight) {
@@ -108,9 +122,16 @@ const EditorPage = () => {
         insightsCount: Array.isArray(result) ? result.length : (result?.insights?.length || 0),
         hasCriteria: Array.isArray(result?.criteria),
         criteriaCount: result?.criteria?.length || 0,
+        criteriaPreview: result?.criteria?.slice(0, 3) || [],
         hasSummary: !!result?.summary,
         meta: result?.meta,
         version: result?.meta?.version || 'unknown'
+      });
+      
+      console.log(`📊 ${UI_VERSION} - DETAILED CRITERIA DEBUG:`, {
+        fullCriteriaArray: result?.criteria || [],
+        criteriaTypes: (result?.criteria || []).map((c: any) => typeof c),
+        criteriaKeys: (result?.criteria || []).map((c: any) => Object.keys(c))
       });
       
       const rawInsights: Insight[] = Array.isArray(result)
@@ -124,11 +145,26 @@ const EditorPage = () => {
       
       console.log(`🔍 ${UI_VERSION} - Processed insights:`, enhancedInsights.length);
       
+      const criteriaData = Array.isArray(result?.criteria) ? result.criteria : [];
+      const summaryData = result?.summary ?? null;
+      
       setInsights(enhancedInsights);
       setMeta(result?.meta);
-      setCriteria(Array.isArray(result?.criteria) ? result.criteria : []);
-      setSummary(result?.summary ?? null);
+      setCriteria(criteriaData);
+      setSummary(summaryData);
+      
+      // Save all data to storage
       storage.saveInsights(doc.id, enhancedInsights);
+      storage.saveCriteria(doc.id, criteriaData);
+      storage.saveSummary(doc.id, summaryData);
+      
+      console.log(`💾 ${UI_VERSION} - Saved to storage:`, {
+        insightsCount: enhancedInsights.length,
+        criteriaCount: criteriaData.length,
+        criteriaData: criteriaData.map(c => ({ id: c.id, score: c.score, name: c.name })),
+        hasSummary: !!summaryData
+      });
+      
       toast({ title: "הניתוח הושלם", description: "הודגשים והערות עודכנו" });
     } catch (e) {
       console.error(`❌ ${UI_VERSION} - Analysis failed:`, e);
@@ -153,40 +189,6 @@ const EditorPage = () => {
     }
   };
 
-  const handleApplySuggestion = (suggestion: string) => {
-    if (!selectedInsight || !doc) return;
-    
-    const start = selectedInsight.rangeStart;
-    const end = selectedInsight.rangeEnd;
-    const newContent = doc.content.slice(0, start) + suggestion + doc.content.slice(end);
-    
-    // Update document
-    const updated = { ...doc, content: newContent, updatedAt: new Date().toISOString() };
-    setDoc(updated);
-    storage.saveDocument(updated);
-    
-    // Update insights positions
-    const updatedInsights = AnchorManager.updateInsightsAfterEdit(
-      insights,
-      start,
-      end,
-      suggestion,
-      newContent
-    );
-    
-    // Mark the current insight as applied
-    const finalInsights = updatedInsights.map(insight => 
-      insight.id === selectedInsight.id 
-        ? { ...insight, isStale: true } // Mark as applied/stale
-        : insight
-    );
-    
-    setInsights(finalInsights);
-    storage.saveInsights(doc.id, finalInsights);
-    setSelectedInsight(null);
-    
-    toast({ title: "הצעה יושמה", description: "הטקסט עודכן בהתאם" });
-  };
 
   const onExportDocx = async () => {
     if (!doc) return;
@@ -291,7 +293,13 @@ const EditorPage = () => {
               onInsightsChange={handleInsightsChange}
               onInsightSelect={setSelectedInsight}
               selectedInsight={selectedInsight}
+              criteria={criteria}
             />
+            {/* Debug criteria data */}
+            {console.log('Editor Debug - Passing criteria to DecisionEditor:', { 
+              criteriaLength: criteria.length, 
+              criteria: criteria.map(c => ({ id: c.id, score: c.score, name: c.name }))
+            })}
 
             {/* Keyboard shortcuts help */}
             <div className="mt-4 text-xs text-gray-500">
@@ -307,7 +315,6 @@ const EditorPage = () => {
             <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
               <InsightDetailPanel
                 insight={selectedInsight}
-                onApplySuggestion={handleApplySuggestion}
                 onClose={() => setSelectedInsight(null)}
               />
             </div>
