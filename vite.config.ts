@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8082, // Changed to 8082 to match Docker deployment
+    allowedHosts: true, // ✅ מאפשר כל host (מתאים ל-Replit)
   },
   base: '/', // Decision Aid is now at root path
   build: {
