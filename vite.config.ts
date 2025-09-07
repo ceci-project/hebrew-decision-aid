@@ -10,7 +10,6 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: [
       ".replit.dev",
       ".repl.co",
-      // ואם עדיין נדרש, גם הדומיין הספציפי:
       "f84a5009-f963-44db-b2bb-5d25b22c372c-00-2woq1nsfwt93e.janeway.replit.dev",
     ],
   },
