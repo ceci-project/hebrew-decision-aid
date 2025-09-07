@@ -7,11 +7,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: true, // מאזין ל-0.0.0.0 / כל ממשקים
     port: 5000,
-    allowedHosts: [
-      ".replit.dev",
-      ".repl.co",
-      "f84a5009-f963-44db-b2bb-5d25b22c372c-00-2woq1nsfwt93e.janeway.replit.dev",
-    ],
+    allowedHosts:"all",
   },
   base: "/",
   build: {
