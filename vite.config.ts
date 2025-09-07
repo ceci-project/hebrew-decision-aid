@@ -6,6 +6,7 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   server: {
     host: true, // מאזין ל-0.0.0.0 / כל ממשקים
+    port: 5000,
     allowedHosts: [
       ".replit.dev",
       ".repl.co",
