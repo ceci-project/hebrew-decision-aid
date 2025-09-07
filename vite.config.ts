@@ -3,26 +3,25 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
-    host: "::",
-    port: 8082, // Changed to 8082 to match Docker deployment
-    allowedHosts: [  
-       "f84a5009-f963-44db-b2bb-5d25b22c372c-00-2woq1nsfwt93e.janeway.replit.dev", // הדומיין הספציפי שמופיע בשגיאה
+    host: true, // מאזין ל-0.0.0.0 / כל ממשקים
+    port: Number(process.env.PORT) || 5173, // שימוש ב-$PORT של ריפליט
+    allowedHosts: [
       ".replit.dev",
       ".repl.co",
-      ],
+      // ואם עדיין נדרש, גם הדומיין הספציפי:
+      "f84a5009-f963-44db-b2bb-5d25b22c372c-00-2woq1nsfwt93e.janeway.replit.dev",
+    ],
   },
-  base: '/', // Decision Aid is now at root path
+  base: "/",
   build: {
-    outDir: 'dist',
-    sourcemap: mode === 'development',
+    outDir: "dist",
+    sourcemap: mode === "development",
   },
   plugins: [
     react(),
-    mode === 'development' &&
-    componentTagger(),
+    mode === "development" && componentTagger(),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -30,8 +29,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   define: {
-    // Pass environment variables to the app
-    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(process.env.VITE_SUPABASE_URL),
-    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(process.env.VITE_SUPABASE_ANON_KEY),
+    "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(process.env.VITE_SUPABASE_URL),
+    "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(process.env.VITE_SUPABASE_ANON_KEY),
   },
 }));
