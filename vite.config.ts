@@ -8,7 +8,11 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8082, // Changed to 8082 to match Docker deployment
-    allowedHosts: true, // ✅ מאפשר כל host (מתאים ל-Replit)
+    allowedHosts: [  
+       "f84a5009-f963-44db-b2bb-5d25b22c372c-00-2woq1nsfwt93e.janeway.replit.dev", // הדומיין הספציפי שמופיע בשגיאה
+      ".replit.dev",
+      ".repl.co",
+      ],
   },
   base: '/', // Decision Aid is now at root path
   build: {
