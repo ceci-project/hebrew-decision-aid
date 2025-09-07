@@ -6,7 +6,6 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   server: {
     host: true, // מאזין ל-0.0.0.0 / כל ממשקים
-    port: Number(process.env.PORT) || 5173, // שימוש ב-$PORT של ריפליט
     allowedHosts: [
       ".replit.dev",
       ".repl.co",
